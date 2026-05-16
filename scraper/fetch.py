@@ -1,8 +1,8 @@
 """
-Nueces County Motivated Seller Lead Scraper v1.6
-v1.6: Extract internal doc IDs from search results href="/doc/{id}"
-      Hit /api/documents/{id} directly for party names and address
-      No more Selenium detail page scraping — pure urllib for enrichment
+Nueces County Motivated Seller Lead Scraper v1.7
+v1.7: Use PublicSearch search API to get internal doc IDs by doc number
+      Then hit /api/documents/{id} for party names
+      GET /api/search?department=FC&documentNumbers[]=2026000292
 """
 
 import json, logging, re, time, urllib.request, urllib.parse
@@ -19,7 +19,12 @@ RECORDS_PATH      = Path("dashboard/records.json")
 RUN_TIMESTAMP     = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 TODAY             = datetime.now(timezone.utc).date()
 CUTOFF            = TODAY - timedelta(days=21)
-API_FETCH_LIMIT   = 249
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Referer": f"{PUBLICSEARCH_BASE}/",
+}
 
 def get_driver():
     from selenium import webdriver
@@ -46,62 +51,91 @@ def parse_date(s):
         pass
     return None
 
-def fetch_doc_api(internal_id):
-    """
-    Hit /api/documents/{id} directly — returns JSON with parties and address.
-    No Selenium needed for this step.
-    """
-    url = f"{PUBLICSEARCH_BASE}/api/documents/{internal_id}"
+def api_get(path, params=None):
+    """Simple GET to PublicSearch API."""
+    url = f"{PUBLICSEARCH_BASE}{path}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
     try:
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Referer": f"{PUBLICSEARCH_BASE}/doc/{internal_id}",
+        req = urllib.request.Request(url, headers=HEADERS)
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.loads(r.read().decode("utf-8", errors="replace"))
+    except Exception as e:
+        log.debug(f"API GET {path} error: {e}")
+        return None
+
+def api_post(path, payload):
+    """POST to PublicSearch API."""
+    url = f"{PUBLICSEARCH_BASE}{path}"
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers={
+            **HEADERS,
+            "Content-Type": "application/json",
         })
         with urllib.request.urlopen(req, timeout=15) as r:
-            data = json.loads(r.read().decode("utf-8", errors="replace"))
-        return data
+            return json.loads(r.read().decode("utf-8", errors="replace"))
     except Exception as e:
-        log.debug(f"API fetch error for doc {internal_id}: {e}")
-        return {}
+        log.debug(f"API POST {path} error: {e}")
+        return None
 
-def extract_from_api(data):
-    """Parse grantor name and property address from API response."""
+def get_internal_id_for_doc(doc_number):
+    """
+    Try multiple API patterns to get internal ID for a doc number.
+    Returns internal_id string or empty string.
+    """
+    # Pattern 1: search by document number
+    endpoints = [
+        f"/api/search?department=FC&documentNumbers[]={doc_number}&take=1",
+        f"/api/search?department=FC&instNum={doc_number}&take=1",
+        f"/api/documents?department=FC&instNum={doc_number}",
+        f"/api/search?instNum={doc_number}&take=1",
+    ]
+    for ep in endpoints:
+        result = api_get(ep)
+        if result:
+            # Try to find ID in response
+            docs = (result.get("hits") or result.get("documents") or
+                    result.get("results") or result.get("data") or [])
+            if isinstance(docs, list) and docs:
+                doc = docs[0]
+                iid = str(doc.get("id") or doc.get("_id") or doc.get("docId") or "")
+                if iid and iid.isdigit():
+                    return iid
+            elif isinstance(docs, dict):
+                iid = str(docs.get("id") or docs.get("_id") or "")
+                if iid and iid.isdigit():
+                    return iid
+            log.debug(f"Pattern {ep}: got result but no ID. Keys: {list(result.keys()) if isinstance(result, dict) else type(result)}")
+    return ""
+
+def fetch_doc_data(internal_id):
+    """Fetch full doc data from /api/documents/{id}."""
+    result = api_get(f"/api/documents/{internal_id}")
+    if not result:
+        return {}, ""
+    # Try to extract grantor
     grantor = ""
-    address = ""
-
-    # Parties array
-    parties = data.get("parties") or data.get("data", {}).get("parties") or []
-    for party in parties:
-        role = (party.get("type") or party.get("role") or "").lower()
-        name = (party.get("name") or party.get("fullName") or "").strip()
-        if role in ("grantor", "mortgagor", "trustor", "borrower", "debtor") and name:
+    parties = (result.get("parties") or
+               result.get("data", {}).get("parties") or [])
+    for p in parties:
+        role = (p.get("type") or p.get("role") or "").lower()
+        name = (p.get("name") or p.get("fullName") or "").strip()
+        if name and (not role or role in ("grantor","mortgagor","trustor","borrower","debtor")):
             grantor = name
-            break
-    # If no typed grantor, take first party
-    if not grantor and parties:
-        grantor = (parties[0].get("name") or parties[0].get("fullName") or "").strip()
-
-    # Property address
-    prop_addrs = (data.get("propAddress") or
-                  data.get("data", {}).get("propAddress") or
-                  data.get("propertyAddresses") or [])
-    if isinstance(prop_addrs, list) and prop_addrs:
-        a = prop_addrs[0]
-        parts = [a.get("address1",""), a.get("address2",""),
-                 a.get("city",""), a.get("state",""), a.get("zip","")]
+            if role:  # prefer typed role
+                break
+    # Address
+    address = ""
+    addrs = result.get("propAddress") or result.get("propertyAddresses") or []
+    if isinstance(addrs, list) and addrs:
+        a = addrs[0]
+        parts = [a.get("address1",""), a.get("city",""), a.get("state",""), a.get("zip","")]
         address = " ".join(p for p in parts if p).strip()
-    elif isinstance(prop_addrs, str):
-        address = prop_addrs.strip()
+    return result, grantor, address
 
-    # Alternative address field names
-    if not address:
-        address = (data.get("propertyAddress") or
-                   data.get("data", {}).get("propertyAddress") or "").strip()
-
-    return grantor, address
-
-def scrape_publicsearch(known_docs):
+def scrape_publicsearch_selenium(known_docs):
+    """Scrape search results page for doc numbers, dates, addresses."""
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
@@ -135,17 +169,22 @@ def scrape_publicsearch(known_docs):
 
             src = driver.page_source
 
+            # Log ALL href patterns on first page for debugging
+            if offset == 0:
+                all_hrefs = re.findall(r'href=["\']([^"\']{3,50})["\']', src)
+                doc_hrefs = [h for h in all_hrefs if re.search(r'\d{5,}', h)]
+                log.info(f"Sample hrefs with numbers: {doc_hrefs[:10]}")
+
+                # Also check for data-id, data-docid attributes
+                data_attrs = re.findall(r'data-(?:id|docid|document-id|inst-num)=["\']([^"\']+)["\']', src, re.IGNORECASE)
+                log.info(f"data-id attrs: {data_attrs[:10]}")
+
             count_m = re.search(r'(\d[\d,]*)\s*of\s*(\d[\d,]*)\s*results?', src, re.IGNORECASE)
             if count_m:
                 log.info(f"Results: {count_m.group(0)}")
 
-            # Extract internal doc IDs from href="/doc/{id}" links
-            internal_ids = re.findall(r'href=["\']\/doc\/(\d+)["\']', src)
-            log.info(f"Internal doc IDs found: {len(internal_ids)}")
-
             page_records = []
             rows = re.findall(r'<tr[^>]*>(.*?)</tr>', src, re.DOTALL | re.IGNORECASE)
-            row_idx = 0
             for row in rows:
                 if re.search(r'<th|thead|DOC.TYPE|RECORDED.DATE', row, re.IGNORECASE):
                     continue
@@ -155,7 +194,6 @@ def scrape_publicsearch(known_docs):
                     continue
                 doc_num = next((c for c in cells if re.match(r'^\d{9,12}$', c.strip())), "")
                 if not doc_num or doc_num in known_docs:
-                    row_idx += 1
                     continue
                 dates = [c for c in cells if re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', c.strip())]
                 address = next((c for c in cells
@@ -163,24 +201,14 @@ def scrape_publicsearch(known_docs):
                     and not re.match(r'^\d{9,12}$', c)
                     and 'FORECLOSURE' not in c.upper()
                     and c.upper() not in ('N/A','')), "N/A")
-
-                # Get matching internal ID for this row
-                internal_id = internal_ids[row_idx] if row_idx < len(internal_ids) else ""
-
                 page_records.append({
-                    "doc_number":  doc_num,
-                    "internal_id": internal_id,
-                    "type":        "NOF",
-                    "source":      "publicsearch",
-                    "county":      "nueces",
-                    "address":     address,
-                    "city":        "CORPUS CHRISTI",
-                    "zip":         "",
-                    "owner":       "",
-                    "date_filed":  dates[0] if dates else "",
-                    "sale_date":   dates[1] if len(dates) > 1 else "",
+                    "doc_number": doc_num, "type": "NOF",
+                    "source": "publicsearch", "county": "nueces",
+                    "address": address, "city": "CORPUS CHRISTI", "zip": "",
+                    "owner": "", "date_filed": dates[0] if dates else "",
+                    "sale_date": dates[1] if len(dates) > 1 else "",
+                    "internal_id": "",
                 })
-                row_idx += 1
 
             log.info(f"offset={offset} | {len(page_records)} extracted")
             page_new = 0
@@ -207,12 +235,10 @@ def scrape_publicsearch(known_docs):
                     page_new += 1
 
             log.info(f"offset={offset} | {page_new} new | {len(new_records)} total")
-
             if len(page_records) == 0:
                 consecutive_empty += 1
             else:
                 consecutive_empty = 0
-
             if consecutive_empty >= 2:
                 log.info("2 empty pages — stopping")
                 break
@@ -231,43 +257,64 @@ def scrape_publicsearch(known_docs):
 
     return new_records
 
-def enrich_with_api(records):
+def enrich_records(records):
     """
-    For all records missing owner names, hit /api/documents/{internal_id}
-    directly using urllib — fast, no Selenium needed.
+    For records missing owner names, try API endpoints to get internal ID
+    then fetch party data. Tests multiple endpoint patterns.
     """
-    # Clear bad names from previous runs
     bad = {'Window.', 'Window', 'Search Results', 'Nueces County', 'Document Preview'}
     for r in records:
         if r.get("owner","") in bad:
             r["owner"] = ""
 
-    needs = [r for r in records if not r.get("owner") and r.get("internal_id")]
-    no_id = [r for r in records if not r.get("owner") and not r.get("internal_id")]
-    log.info(f"Enrichment: {len(needs)} with internal_id | {len(no_id)} without")
+    needs = [r for r in records if not r.get("owner")][:30]  # test first 30
+    log.info(f"Testing API enrichment on {len(needs)} records...")
 
-    needs = needs[:API_FETCH_LIMIT]
+    if not needs:
+        log.info("All records already have owner names")
+        return 0
+
+    # First — test what API endpoints are available
+    test_doc = needs[0]["doc_number"]
+    log.info(f"Testing API patterns for doc {test_doc}...")
+
+    test_patterns = [
+        f"/api/search?department=FC&documentNumbers[]={test_doc}&take=1",
+        f"/api/search?department=FC&instNum={test_doc}&take=1",
+        f"/api/search?instNum={test_doc}&take=1",
+        f"/api/search?documentNumber={test_doc}",
+        f"/api/documents?instNum={test_doc}",
+        f"/api/fc/search?instNum={test_doc}",
+    ]
+    working_pattern = None
+    for pat in test_patterns:
+        result = api_get(pat)
+        if result is not None:
+            log.info(f"  FOUND endpoint: {pat} → keys: {list(result.keys()) if isinstance(result,dict) else type(result).__name__}")
+            working_pattern = pat
+            break
+        else:
+            log.info(f"  MISS: {pat}")
+
+    if not working_pattern:
+        log.info("No working API pattern found — skipping enrichment")
+        return 0
+
     enriched = 0
-    addr_filled = 0
-
     for i, rec in enumerate(needs):
-        internal_id = rec["internal_id"]
-        data = fetch_doc_api(internal_id)
-
-        if data:
-            grantor, address = extract_from_api(data)
+        doc_num = rec["doc_number"]
+        iid = get_internal_id_for_doc(doc_num)
+        if iid:
+            _, grantor, address = fetch_doc_data(iid)
             if grantor:
                 rec["owner"] = grantor.title()
+                rec["internal_id"] = iid
                 enriched += 1
             if address and address != "N/A":
                 rec["address"] = address
-                addr_filled += 1
+        time.sleep(0.4)
 
-        if (i + 1) % 20 == 0:
-            log.info(f"  API progress: {i+1}/{len(needs)} | {enriched} named | {addr_filled} addresses")
-        time.sleep(0.3)
-
-    log.info(f"API enrichment: {enriched}/{len(needs)} named | {addr_filled} addresses filled")
+    log.info(f"API enrichment: {enriched}/{len(needs)} named")
     return enriched
 
 def load_known_docs():
@@ -289,17 +336,16 @@ def write_records(records):
 
 def main():
     log.info("=" * 60)
-    log.info("Nueces County Lead Scraper v1.6")
+    log.info("Nueces County Lead Scraper v1.7")
     log.info(f"Cutoff: {CUTOFF} (21 days) | Today: {TODAY}")
     log.info("=" * 60)
 
     known_docs, prev_records = load_known_docs()
-    new_records = scrape_publicsearch(known_docs)
+    new_records = scrape_publicsearch_selenium(known_docs)
 
     for r in prev_records:
         r["is_new"] = False
 
-    # Merge
     seen = {}
     for r in new_records + prev_records:
         doc = r.get("doc_number","")
@@ -308,10 +354,8 @@ def main():
     records = list(seen.values())
     log.info(f"After merge: {len(records)} total")
 
-    # Enrich all missing owner names via API
-    enrich_with_api(records)
+    enrich_records(records)
 
-    # Score
     for r in records:
         s = 5
         if r.get("days_until_sale") is not None:
