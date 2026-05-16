@@ -1,5 +1,5 @@
 """
-Nueces County Motivated Seller Lead Scraper v1.4
+Nueces County Motivated Seller Lead Scraper v1.5
 v1.4: Detail fetch runs on ALL records missing owner names
       (new + existing), not just new ones
 """
@@ -18,7 +18,7 @@ RECORDS_PATH      = Path("dashboard/records.json")
 RUN_TIMESTAMP     = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 TODAY             = datetime.now(timezone.utc).date()
 CUTOFF            = TODAY - timedelta(days=21)
-DOC_FETCH_LIMIT   = 60
+DOC_FETCH_LIMIT   = 249
 
 def get_driver():
     from selenium import webdriver
@@ -276,7 +276,7 @@ def write_records(records):
 
 def main():
     log.info("=" * 60)
-    log.info("Nueces County Lead Scraper v1.4")
+    log.info("Nueces County Lead Scraper v1.5")
     log.info(f"Cutoff: {CUTOFF} (21 days) | Today: {TODAY}")
     log.info("=" * 60)
 
@@ -294,6 +294,12 @@ def main():
             seen[doc] = r
     records = list(seen.values())
     log.info(f"After merge: {len(records)} total records")
+
+    # Clean bad owner names from previous runs
+    bad_names = {'Window.', 'Window', 'Search Results', 'Nueces County'}
+    for r in records:
+        if r.get('owner','') in bad_names:
+            r['owner'] = ''
 
     # Enrich ALL records missing owner names (new + existing)
     fetch_owner_details(records, get_driver_fn)
