@@ -1,9 +1,6 @@
 """
-Nueces County Motivated Seller Lead Scraper v1.9
-v1.9: Build doc_number -> internal_id map using doc number range search
-      Load results page with doc range, wait for React, get all /doc/ links
-      Then visit each detail page for party names
-      Separate pass from known_docs check so existing records get enriched
+Nueces County Motivated Seller Lead Scraper v1.10 - DIAGNOSTIC
+Logs ALL links and clickable elements from rendered page to find doc ID pattern
 """
 
 import json, logging, re, time
@@ -20,7 +17,6 @@ RECORDS_PATH      = Path("dashboard/records.json")
 RUN_TIMESTAMP     = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 TODAY             = datetime.now(timezone.utc).date()
 CUTOFF            = TODAY - timedelta(days=21)
-ENRICH_LIMIT      = 50  # enrich 50 per run, builds up over time
 
 def get_driver():
     from selenium import webdriver
@@ -47,155 +43,94 @@ def parse_date(s):
         pass
     return None
 
-def wait_for_react(driver, timeout=15):
-    """Wait for React to fully render the page."""
+def diagnostic_page(driver, url):
+    """Load page and log everything useful for finding doc IDs."""
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.common.by import By
-    try:
-        WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "table tr td, .no-results")))
-        time.sleep(3)  # extra wait for React hydration and link rendering
-    except Exception:
-        time.sleep(5)
 
-def get_doc_id_map_from_range(driver, doc_nums):
-    """
-    Load search results for a specific doc number range.
-    Extract /doc/{id} links from the rendered React DOM.
-    Returns dict: doc_number_str -> internal_id_str
-    """
-    if not doc_nums:
-        return {}
-
-    doc_nums_sorted = sorted(doc_nums)
-    min_doc = doc_nums_sorted[0]
-    max_doc = doc_nums_sorted[-1]
-
-    url = (f"{PUBLICSEARCH_BASE}/results"
-           f"?department=FC"
-           f"&documentNumberRange[]={min_doc}"
-           f"&documentNumberRange[]={max_doc}")
-
-    log.info(f"Loading doc range search: {min_doc} to {max_doc}")
     driver.get(url)
-    wait_for_react(driver, timeout=20)
-
-    # Get all /doc/ links via JS
-    links = driver.execute_script(
-        "return Array.from(document.querySelectorAll('a[href*=\"/doc/\"]')).map(a => ({href: a.href, text: a.innerText}));"
-    ) or []
-    log.info(f"React DOM doc links found: {len(links)}")
-
-    # Also check page source for doc numbers in table rows
-    src = driver.page_source
-
-    # Build map: for each result row, extract doc_num and internal_id
-    result_map = {}
-
-    # Try to pair internal IDs from links with doc numbers from table
-    internal_ids = []
-    for link in links:
-        href = link.get("href","")
-        m = re.search(r'/doc/(\d+)', href)
-        if m:
-            internal_ids.append(m.group(1))
-
-    # Get doc numbers from table in order
-    rows = re.findall(r'<tr[^>]*>(.*?)</tr>', src, re.DOTALL | re.IGNORECASE)
-    table_doc_nums = []
-    for row in rows:
-        if re.search(r'<th|thead|DOC.TYPE|RECORDED.DATE', row, re.IGNORECASE):
-            continue
-        cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
-        cells = [re.sub(r'<[^>]+>', '', c).strip() for c in cells if c.strip()]
-        doc_num = next((c for c in cells if re.match(r'^\d{9,12}$', c.strip())), "")
-        if doc_num:
-            table_doc_nums.append(doc_num)
-
-    log.info(f"Table doc nums: {len(table_doc_nums)} | Internal IDs: {len(internal_ids)}")
-
-    # Pair them up
-    for i, (doc_num, iid) in enumerate(zip(table_doc_nums, internal_ids)):
-        result_map[doc_num] = iid
-
-    log.info(f"doc_id_map from range search: {len(result_map)} entries")
-    if result_map:
-        sample = list(result_map.items())[:3]
-        log.info(f"Sample: {sample}")
-
-    return result_map
-
-def get_party_from_detail_page(driver, internal_id):
-    """Visit /doc/{id} and extract party names from rendered React DOM."""
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.common.by import By
-
-    url = f"{PUBLICSEARCH_BASE}/doc/{internal_id}"
     try:
-        driver.get(url)
-        WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR,
-                "[class*='summary'], table, h1, [class*='detail']")))
-        time.sleep(2.5)
+        WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "table tr td")))
+        time.sleep(4)
+    except Exception:
+        time.sleep(6)
 
-        # Try JS to get party from Redux store or window.__data
-        grantor = driver.execute_script("""
-            try {
-                // Check window.__data which is set on page load
-                if (window.__data) {
-                    var dp = window.__data.docPreview;
-                    if (dp && dp.document && dp.document.data) {
-                        var parties = dp.document.data.parties || [];
-                        for (var p of parties) {
-                            if (p && p.name) return p.name;
-                        }
-                    }
+    # 1. All anchor hrefs
+    hrefs = driver.execute_script("return Array.from(document.querySelectorAll('a')).map(a => a.href).filter(h => h && !h.includes('fonts') && !h.includes('.css') && !h.includes('.js'));")
+    log.info(f"All anchor hrefs: {hrefs[:20]}")
+
+    # 2. All data attributes on table rows/cells
+    data_attrs = driver.execute_script("""
+        var els = document.querySelectorAll('tr, td, [data-id], [data-docid], [data-doc]');
+        var attrs = [];
+        for (var el of els) {
+            var d = {};
+            for (var a of el.attributes) {
+                if (a.name.startsWith('data-') || a.name === 'id') {
+                    d[a.name] = a.value;
                 }
-                // Check Redux store
-                var reduxKey = Object.keys(window).find(k => window[k] && window[k].getState);
-                if (reduxKey) {
-                    var state = window[reduxKey].getState();
-                    var dp2 = state.docPreview;
-                    if (dp2 && dp2.document && dp2.document.data) {
-                        var parties2 = dp2.document.data.parties || [];
-                        for (var p2 of parties2) {
-                            if (p2 && p2.name) return p2.name;
-                        }
-                    }
-                }
-                // Try rendered DOM text
-                var partyEls = document.querySelectorAll('[class*="party"], [class*="grantor"], [class*="name"]');
-                for (var el of partyEls) {
-                    var txt = el.innerText && el.innerText.trim();
-                    if (txt && txt.length > 5 && txt.length < 60 && /[A-Z]/.test(txt) && !/Parties|Grantor|Name/.test(txt)) {
-                        return txt;
-                    }
-                }
-                return '';
-            } catch(e) { return 'ERR:'+e.message; }
-        """)
+            }
+            if (Object.keys(d).length > 0) attrs.push(d);
+        }
+        return attrs.slice(0, 20);
+    """)
+    log.info(f"Data attrs on rows/cells: {data_attrs}")
 
-        if grantor and not grantor.startswith('ERR:'):
-            return grantor.strip()
+    # 3. Window __data docPreview
+    doc_preview = driver.execute_script("try { return JSON.stringify(window.__data && window.__data.docPreview); } catch(e) { return null; }")
+    log.info(f"window.__data.docPreview: {str(doc_preview)[:200] if doc_preview else 'none'}")
 
-        # Final fallback: parse rendered page source
-        src = driver.page_source
-        data_m = re.search(r'"parties"\s*:\s*\[([^\]]{0,500})\]', src)
-        if data_m:
-            name_m = re.search(r'"name"\s*:\s*"([^"]{3,60})"', data_m.group(1))
-            if name_m:
-                return name_m.group(1).strip()
+    # 4. Window __data workspaces
+    workspaces = driver.execute_script("try { return JSON.stringify(window.__data && window.__data.workspaces); } catch(e) { return null; }")
+    log.info(f"workspaces keys: {str(workspaces)[:300] if workspaces else 'none'}")
 
-    except Exception as e:
-        log.debug(f"Detail error for {internal_id}: {e}")
-    return ""
+    # 5. Search state
+    search_state = driver.execute_script("""
+        try {
+            var ws = window.__data && window.__data.workspaces;
+            if (!ws) return null;
+            var tabs = ws.tabs;
+            if (!tabs) return null;
+            var keys = Object.keys(tabs);
+            for (var k of keys) {
+                var tab = tabs[k];
+                if (tab && tab.searchResults) return JSON.stringify(tab.searchResults).slice(0, 500);
+                if (tab && tab.results) return JSON.stringify(tab.results).slice(0, 500);
+            }
+            return JSON.stringify(ws).slice(0, 300);
+        } catch(e) { return 'err:'+e.message; }
+    """)
+    log.info(f"Search results in state: {search_state}")
+
+    # 6. Check if Redux store is available
+    redux = driver.execute_script("""
+        try {
+            var stores = Object.keys(window).filter(k => window[k] && typeof window[k].getState === 'function');
+            if (stores.length === 0) return 'no stores';
+            var state = window[stores[0]].getState();
+            var keys = Object.keys(state);
+            return 'store keys: ' + keys.join(', ');
+        } catch(e) { return 'err:'+e.message; }
+    """)
+    log.info(f"Redux: {redux}")
+
+    # 7. Look for document IDs in page source directly
+    src = driver.page_source
+    # Find any large numbers that could be internal IDs (7-9 digits)
+    large_nums = re.findall(r'\b(3\d{8})\b', src)
+    unique_large = list(dict.fromkeys(large_nums))[:10]
+    log.info(f"Large nums (3xxxxxxxx pattern) in src: {unique_large}")
+
+    # 8. Find instNum or documentId patterns in page source
+    inst_nums = re.findall(r'"(?:id|instNum|documentId|docId)"\s*:\s*(\d{6,12})', src)
+    log.info(f"id/instNum in JSON: {inst_nums[:10]}")
 
 def scrape_publicsearch(known_docs):
-    from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.common.by import By
 
     new_records = []
     driver = None
@@ -206,6 +141,7 @@ def scrape_publicsearch(known_docs):
         driver = get_driver()
         offset = 0
         consecutive_empty = 0
+        first_page = True
 
         while True:
             url = (f"{PUBLICSEARCH_BASE}/results"
@@ -213,11 +149,29 @@ def scrape_publicsearch(known_docs):
                    f"&instrumentDateRange={cutoff_str}%2C{today_str}"
                    f"&keywordSearch=false&offset={offset}")
             log.info(f"Fetching offset={offset}")
+
+            driver.get(url)
             try:
+                WebDriverWait(driver, 30).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "table tr td")))
+                time.sleep(3)
+            except Exception:
+                time.sleep(5)
+
+            # Run diagnostic on first page
+            if first_page:
+                log.info("=== DIAGNOSTIC PAGE 1 ===")
+                diagnostic_page(driver, url)
+                log.info("=== END DIAGNOSTIC ===")
+                first_page = False
+                # Re-navigate since diagnostic may have changed state
                 driver.get(url)
-                wait_for_react(driver)
-            except Exception as e:
-                log.warning(f"Load issue at offset {offset}: {e}")
+                try:
+                    WebDriverWait(driver, 30).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "table tr td")))
+                    time.sleep(3)
+                except Exception:
+                    time.sleep(5)
 
             src = driver.page_source
             count_m = re.search(r'(\d[\d,]*)\s*of\s*(\d[\d,]*)\s*results?', src, re.IGNORECASE)
@@ -250,7 +204,7 @@ def scrape_publicsearch(known_docs):
                     "sale_date": dates[1] if len(dates) > 1 else "",
                 })
 
-            log.info(f"offset={offset} | {len(page_records)} new extracted")
+            log.info(f"offset={offset} | {len(page_records)} new")
             for rec in page_records:
                 doc = rec["doc_number"]
                 if doc not in known_docs:
@@ -288,64 +242,7 @@ def scrape_publicsearch(known_docs):
             try: driver.quit()
             except Exception: pass
 
-    log.info(f"Scrape complete: {len(new_records)} new records")
     return new_records
-
-def build_id_map_and_enrich(records):
-    """
-    For records missing owner names:
-    1. Use doc number range search to get internal IDs
-    2. Visit each detail page to get party names
-    """
-    bad = {'Window.','Window','Search Results','Nueces County','Document Preview'}
-    for r in records:
-        if r.get("owner","") in bad:
-            r["owner"] = ""
-
-    needs = [r for r in records if not r.get("owner")]
-    log.info(f"Records needing owner names: {len(needs)}")
-    if not needs:
-        return 0
-
-    # Get doc numbers we need IDs for
-    doc_nums = [r["doc_number"] for r in needs if r.get("doc_number")]
-    log.info(f"Building internal ID map for {len(doc_nums)} records...")
-
-    driver = None
-    enriched = 0
-    try:
-        driver = get_driver()
-
-        # Build the map using doc number range search
-        doc_id_map = get_doc_id_map_from_range(driver, doc_nums)
-
-        # Update records with internal IDs
-        for r in needs:
-            if r["doc_number"] in doc_id_map:
-                r["internal_id"] = doc_id_map[r["doc_number"]]
-
-        # Enrich records that now have internal IDs
-        has_id = [r for r in needs if r.get("internal_id")][:ENRICH_LIMIT]
-        log.info(f"Enriching {len(has_id)} records with internal IDs...")
-
-        for i, rec in enumerate(has_id):
-            grantor = get_party_from_detail_page(driver, rec["internal_id"])
-            if grantor:
-                rec["owner"] = grantor.title()
-                enriched += 1
-            if (i+1) % 10 == 0:
-                log.info(f"  Enriched: {i+1}/{len(has_id)} | {enriched} named")
-            time.sleep(0.5)
-
-    except Exception as e:
-        log.error(f"Enrichment error: {e}")
-    finally:
-        if driver:
-            try: driver.quit()
-            except Exception: pass
-
-    log.info(f"Enrichment complete: {enriched} named")
-    return enriched
 
 def load_known_docs():
     try:
@@ -353,7 +250,6 @@ def load_known_docs():
         log.info(f"Loaded {len(existing)} existing records")
         return {r["doc_number"] for r in existing if r.get("doc_number")}, existing
     except Exception:
-        log.info("No existing records")
         return set(), []
 
 def write_records(records):
@@ -366,12 +262,16 @@ def write_records(records):
 
 def main():
     log.info("=" * 60)
-    log.info("Nueces County Lead Scraper v1.9")
-    log.info(f"Cutoff: {CUTOFF} (21 days) | Today: {TODAY}")
+    log.info("Nueces County Lead Scraper v1.10 DIAGNOSTIC")
+    log.info(f"Cutoff: {CUTOFF} | Today: {TODAY}")
     log.info("=" * 60)
 
     known_docs, prev_records = load_known_docs()
-    new_records = scrape_publicsearch(known_docs)
+    # Clear known_docs so we force a fresh page load with diagnostic
+    known_docs_backup = set(known_docs)
+    known_docs_empty = set()  # Use empty set so first page loads with content
+
+    new_records = scrape_publicsearch(known_docs_empty)
 
     for r in prev_records:
         r["is_new"] = False
@@ -382,23 +282,11 @@ def main():
         if doc and doc not in seen:
             seen[doc] = r
     records = list(seen.values())
-    log.info(f"After merge: {len(records)} total")
 
-    build_id_map_and_enrich(records)
-
-    for r in records:
-        s = 5
-        if r.get("days_until_sale") is not None:
-            if r["days_until_sale"] <= 14: s += 2
-            elif r["days_until_sale"] <= 30: s += 1
-        r["score"] = min(s, 10)
-
-    new_ct = sum(1 for r in records if r.get("is_new"))
-    named  = sum(1 for r in records if r.get("owner"))
+    named = sum(1 for r in records if r.get("owner"))
     urgent = sum(1 for r in records if "URGENT" in r.get("flags",[]))
-    log.info(f"Final: {len(records)} total | {new_ct} new | {named} named | {urgent} URGENT")
+    log.info(f"Final: {len(records)} total | {named} named | {urgent} URGENT")
     write_records(records)
-    log.info(f"Dashboard: {len(records)} records, {RECORDS_PATH.stat().st_size:,} bytes")
     log.info("Done.")
 
 if __name__ == "__main__":
