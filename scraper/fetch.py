@@ -1,61 +1,51 @@
 """
-Nueces County Motivated Seller Lead Scraper v1.1
-Primary: nueces.tx.publicsearch.us (Selenium, runs 2x daily)
-Foreclosures only — no VBP/CE for Nueces County.
-
-v1.1 fixes:
-  - Correct URL format: instrumentDateRange instead of dateRange
-  - No docTypes filter — department=FC returns all foreclosure notices
-  - 21-day window for fresh leads
-  - Correct HTML extraction for Nueces PublicSearch structure
+Nueces County Motivated Seller Lead Scraper v1.2
+v1.2: Remove false-positive no-results detection
+      Better row extraction for Nueces PublicSearch HTML
+      Log page source snippet for debugging
 """
 
-import json
-import logging
-import os
-import re
-import time
-import urllib.request
-import urllib.parse
+import json, logging, re, time, urllib.parse
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-logging.basicConfig(
-    level=logging.INFO,
+logging.basicConfig(level=logging.INFO,
     format="%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+    datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger(__name__)
 
 PUBLICSEARCH_BASE = "https://nueces.tx.publicsearch.us"
 RECORDS_PATH      = Path("dashboard/records.json")
+RUN_TIMESTAMP     = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+TODAY             = datetime.now(timezone.utc).date()
+CUTOFF            = TODAY - timedelta(days=21)
 
-RUN_TIMESTAMP = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-TODAY         = datetime.now(timezone.utc).date()
-CUTOFF        = TODAY - timedelta(days=21)
-
-log.info(f"Date range: {CUTOFF.strftime('%Y%m%d')} to {TODAY.strftime('%Y%m%d')}")
-
-# ── SELENIUM ──────────────────────────────────────────────────────────────────
 def get_driver():
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
     opts = Options()
-    opts.add_argument("--headless")
-    opts.add_argument("--no-sandbox")
-    opts.add_argument("--disable-dev-shm-usage")
-    opts.add_argument("--disable-gpu")
-    opts.add_argument("--window-size=1280,800")
+    for a in ["--headless","--no-sandbox","--disable-dev-shm-usage","--disable-gpu","--window-size=1280,800"]:
+        opts.add_argument(a)
     opts.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
     try:
         return webdriver.Chrome(options=opts)
     except Exception:
-        svc = Service("/usr/bin/chromedriver")
-        return webdriver.Chrome(service=svc, options=opts)
+        return webdriver.Chrome(service=Service("/usr/bin/chromedriver"), options=opts)
 
+def parse_date(s):
+    """Parse M/D/YYYY or YYYY-MM-DD to date object, return None on fail"""
+    try:
+        p = s.strip().split("/")
+        if len(p) == 3 and len(p[2]) == 4:
+            return datetime(int(p[2]), int(p[0]), int(p[1])).date()
+        p2 = s.strip().split("-")
+        if len(p2) == 3 and len(p2[0]) == 4:
+            return datetime(int(p2[0]), int(p2[1]), int(p2[2])).date()
+    except Exception:
+        pass
+    return None
 
-# ── PUBLICSEARCH SCRAPER ──────────────────────────────────────────────────────
 def scrape_publicsearch(known_docs):
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
@@ -63,20 +53,13 @@ def scrape_publicsearch(known_docs):
 
     new_records = []
     driver = None
+    cutoff_str = CUTOFF.strftime("%Y%m%d")
+    today_str  = TODAY.strftime("%Y%m%d")
 
     try:
         driver = get_driver()
-
-        cutoff_str = CUTOFF.strftime("%Y%m%d")
-        today_str  = TODAY.strftime("%Y%m%d")
-
-        # URL format from Nueces PublicSearch — department=FC, instrumentDateRange
         offset = 0
         consecutive_empty = 0
-        total_new = 0
-
-        log.info(f"Scraping Nueces Foreclosures (department=FC)...")
-        log.info(f"Date range: {cutoff_str} to {today_str}")
 
         while True:
             url = (
@@ -86,183 +69,155 @@ def scrape_publicsearch(known_docs):
                 f"&keywordSearch=false"
                 f"&offset={offset}"
             )
-
-            log.info(f"  Fetching offset={offset}: {url}")
+            log.info(f"Fetching offset={offset}")
 
             try:
                 driver.get(url)
-                # Wait for results table or no-results message
                 WebDriverWait(driver, 30).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR,
-                        "table, .results-table, [class*='result'], .no-results, h2"))
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "table tr, .result-document, [data-testid]"))
                 )
                 time.sleep(2)
             except Exception as e:
-                log.warning(f"  Page load timeout at offset {offset}: {e}")
-                break
+                log.warning(f"Page load issue at offset {offset}: {e}")
+                # Don't break — try to parse whatever loaded
+                time.sleep(3)
 
-            page_source = driver.page_source
+            src = driver.page_source
 
-            # Log page title for debugging
-            title_match = re.search(r'<title[^>]*>(.*?)</title>', page_source, re.DOTALL)
-            if title_match:
-                log.info(f"  Page title: {title_match.group(1).strip()[:80]}")
+            # Log snippet for debugging first page
+            if offset == 0:
+                # Find a chunk around "result" or table tags
+                snippet_match = re.search(r'<(?:table|tbody|tr)[^>]*>(.{0,500})', src, re.DOTALL)
+                if snippet_match:
+                    log.info(f"Page snippet: {snippet_match.group(0)[:300].replace(chr(10),' ')}")
+                else:
+                    log.info(f"No table found. Body snippet: {src[2000:2500].replace(chr(10),' ')}")
 
-            # Check for no results
-            if re.search(r'no results|0 results|no records found', page_source, re.IGNORECASE):
-                log.info(f"  No results page detected — stopping")
-                break
+            # Log result count hint
+            count_match = re.search(r'(\d[\d,]*)\s*(?:of\s*\d[\d,]*)?\s*results?', src, re.IGNORECASE)
+            if count_match:
+                log.info(f"Result count: {count_match.group(0)}")
 
-            # Extract records from page
+            # ── Extract records ──────────────────────────────────────────────
             page_records = []
 
-            # Try to find result count
-            count_match = re.search(r'(\d+(?:,\d+)?)\s*(?:of\s*\d+\s*)?results', page_source, re.IGNORECASE)
-            if count_match:
-                log.info(f"  Results indicator: {count_match.group(0)}")
+            # Method 1: JSON from __NEXT_DATA__
+            json_match = re.search(
+                r'<script[^>]*id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
+                src, re.DOTALL)
+            if json_match:
+                try:
+                    nd = json.loads(json_match.group(1))
+                    # Walk down props → pageProps → results/documents
+                    pp = nd.get("props",{}).get("pageProps",{})
+                    results = (pp.get("results") or pp.get("documents") or
+                               pp.get("searchResults") or
+                               nd.get("props",{}).get("initialState",{}).get("results",[]) or [])
+                    log.info(f"__NEXT_DATA__ results: {len(results)}")
+                    for r in results:
+                        doc_num = str(r.get("documentNumber") or r.get("docNumber") or r.get("id") or "")
+                        if not doc_num or doc_num in known_docs:
+                            continue
+                        page_records.append({
+                            "doc_number":  doc_num,
+                            "type":        "NOF",
+                            "source":      "publicsearch",
+                            "county":      "nueces",
+                            "address":     r.get("propertyAddress") or r.get("address") or "N/A",
+                            "city":        "CORPUS CHRISTI",
+                            "zip":         r.get("zip") or "",
+                            "owner":       r.get("grantorName") or r.get("grantor") or "",
+                            "date_filed":  (r.get("instrumentDate") or r.get("recordDate") or "")[:10],
+                            "sale_date":   r.get("saleDate") or "",
+                        })
+                except Exception as e:
+                    log.debug(f"__NEXT_DATA__ parse error: {e}")
 
-            # Extract rows from the results table
-            # Nueces PublicSearch shows: DOC TYPE | RECORDED DATE | SALE DATE | DOC NUMBER | PROPERTY ADDRESS
-            rows = re.findall(
-                r'<tr[^>]*>(.*?)</tr>',
-                page_source, re.DOTALL | re.IGNORECASE
-            )
+            # Method 2: __REDUX_STATE__ or similar
+            if not page_records:
+                for state_var in ["__REDUX_STATE__","__APP_STATE__","__INITIAL_STATE__"]:
+                    sm = re.search(rf'window\.{state_var}\s*=\s*(\{{.*?\}})\s*;', src, re.DOTALL)
+                    if sm:
+                        try:
+                            state = json.loads(sm.group(1))
+                            results = (state.get("search",{}).get("results",[]) or
+                                       state.get("results",{}).get("data",[]) or [])
+                            log.info(f"{state_var} results: {len(results)}")
+                            for r in results:
+                                doc_num = str(r.get("documentNumber") or r.get("docNumber") or "")
+                                if doc_num and doc_num not in known_docs:
+                                    page_records.append({
+                                        "doc_number": doc_num, "type": "NOF",
+                                        "source": "publicsearch", "county": "nueces",
+                                        "address": r.get("propertyAddress") or "N/A",
+                                        "city": "CORPUS CHRISTI", "zip": r.get("zip",""),
+                                        "owner": r.get("grantorName",""),
+                                        "date_filed": (r.get("instrumentDate") or r.get("recordDate",""))[:10],
+                                        "sale_date": r.get("saleDate",""),
+                                    })
+                        except Exception:
+                            pass
+                        break
 
-            for row in rows:
-                # Skip header rows
-                if re.search(r'<th|thead|DOC TYPE|RECORDED DATE', row, re.IGNORECASE):
-                    continue
-
-                cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL | re.IGNORECASE)
-                cells = [re.sub(r'<[^>]+>', '', c).strip() for c in cells]
-                cells = [c for c in cells if c]  # remove empty
-
-                if len(cells) < 3:
-                    continue
-
-                # Try to find doc number — usually a numeric string
-                doc_num = ""
-                date_filed = ""
-                sale_date = ""
-                address = ""
-                doc_type = ""
-
-                for cell in cells:
-                    cell_clean = cell.strip()
-                    # Doc number pattern: year + sequential (e.g. 2026000297)
-                    if re.match(r'^\d{10}$', cell_clean) and not doc_num:
-                        doc_num = cell_clean
-                    # Date pattern MM/DD/YYYY
-                    elif re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', cell_clean):
-                        if not date_filed:
-                            date_filed = cell_clean
-                        elif not sale_date:
-                            sale_date = cell_clean
-                    # Doc type
-                    elif 'FORECLOSURE' in cell_clean.upper() and not doc_type:
-                        doc_type = cell_clean
-                    # Address — contains numbers and street words
-                    elif re.search(r'\d+\s+[A-Z]', cell_clean) and len(cell_clean) > 5 and not address:
-                        address = cell_clean
-                    elif cell_clean.upper() not in ('N/A', '', 'DOC TYPE', 'RECORDED DATE', 'SALE DATE', 'DOC NUMBER', 'PROPERTY ADDRESS'):
-                        if len(cell_clean) > 8 and not address and re.search(r'[A-Z]{2,}', cell_clean):
-                            address = cell_clean
-
-                if doc_num and doc_num not in known_docs:
+            # Method 3: HTML table rows
+            if not page_records:
+                rows = re.findall(r'<tr[^>]*>(.*?)</tr>', src, re.DOTALL | re.IGNORECASE)
+                log.info(f"Table rows found: {len(rows)}")
+                for row in rows:
+                    if re.search(r'<th|thead|DOC.TYPE|RECORDED.DATE', row, re.IGNORECASE):
+                        continue
+                    cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
+                    cells = [re.sub(r'<[^>]+>', '', c).strip() for c in cells if c.strip()]
+                    if len(cells) < 3:
+                        continue
+                    # Find doc number — 10-digit numeric
+                    doc_num = next((c for c in cells if re.match(r'^\d{9,12}$', c)), "")
+                    if not doc_num or doc_num in known_docs:
+                        continue
+                    dates = [c for c in cells if re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', c)]
                     page_records.append({
-                        "doc_number":  doc_num,
-                        "type":        "NOF",
-                        "source":      "publicsearch",
-                        "county":      "nueces",
-                        "address":     address or "N/A",
-                        "city":        "CORPUS CHRISTI",
-                        "zip":         "",
+                        "doc_number":  doc_num, "type": "NOF",
+                        "source":      "publicsearch", "county": "nueces",
+                        "address":     next((c for c in cells if re.search(r'\d+\s+[A-Z]', c) and len(c) > 8), "N/A"),
+                        "city":        "CORPUS CHRISTI", "zip": "",
                         "owner":       "",
-                        "date_filed":  date_filed,
-                        "sale_date":   sale_date,
-                        "doc_type":    doc_type or "FORECLOSURE NOTICE",
+                        "date_filed":  dates[0] if dates else "",
+                        "sale_date":   dates[1] if len(dates) > 1 else "",
                     })
 
-            # Also try JSON extraction from page state
-            json_match = re.search(
-                r'window\.__NEXT_DATA__\s*=\s*(\{.*?\})\s*;?\s*</script>',
-                page_source, re.DOTALL
-            )
-            if json_match and not page_records:
-                try:
-                    state = json.loads(json_match.group(1))
-                    # Navigate to results
-                    props = state.get("props", {})
-                    page_props = props.get("pageProps", {})
-                    results = (
-                        page_props.get("results", []) or
-                        page_props.get("data", {}).get("results", []) or
-                        []
-                    )
-                    for r in results:
-                        doc_num = str(r.get("documentNumber") or r.get("docNumber") or "")
-                        if doc_num and doc_num not in known_docs:
-                            page_records.append({
-                                "doc_number":  doc_num,
-                                "type":        "NOF",
-                                "source":      "publicsearch",
-                                "county":      "nueces",
-                                "address":     r.get("propertyAddress") or "N/A",
-                                "city":        "CORPUS CHRISTI",
-                                "zip":         r.get("zip") or "",
-                                "owner":       r.get("grantorName") or r.get("grantor") or "",
-                                "date_filed":  (r.get("recordDate") or r.get("instrumentDate") or "")[:10],
-                                "sale_date":   r.get("saleDate") or "",
-                                "doc_type":    r.get("docType") or "FORECLOSURE NOTICE",
-                            })
-                    if page_records:
-                        log.info(f"  Extracted {len(page_records)} records from JSON state")
-                except Exception as e:
-                    log.debug(f"  JSON state parse error: {e}")
+            # Method 4: data-docid or href links containing doc numbers
+            if not page_records:
+                doc_links = re.findall(r'(?:data-docid|/results/(\d{8,12})|href="[^"]*?(\d{8,12})[^"]*")', src)
+                log.info(f"Doc links found: {len(doc_links)}")
 
-            log.info(f"  offset={offset} | {len(page_records)} on page")
+            log.info(f"offset={offset} | {len(page_records)} records extracted")
 
-            # Add new records
             page_new = 0
             for rec in page_records:
                 doc = rec["doc_number"]
-                if doc and doc not in known_docs:
+                if doc not in known_docs:
                     known_docs.add(doc)
-                    rec.update({
-                        "is_new":          True,
-                        "run_ts":          RUN_TIMESTAMP,
-                        "score":           5,
-                        "flags":           [],
-                        "absentee":        False,
-                        "duplicate":       False,
-                        "days_until_sale": None,
-                        "loan_amount":     "",
-                        "loan_date":       "",
-                        "lender":          "",
-                        "trustee":         "",
-                        "appraised_value": "",
-                        "annual_taxes":    "",
-                        "mail_addr":       "",
-                        "ps_doc_id":       "",
-                    })
-                    # Calculate days until sale
+                    flags = []
+                    days = None
                     if rec.get("sale_date"):
-                        try:
-                            parts = rec["sale_date"].split("/")
-                            if len(parts) == 3:
-                                sd = datetime(int(parts[2]), int(parts[0]), int(parts[1])).date()
-                                rec["days_until_sale"] = (sd - TODAY).days
-                                if rec["days_until_sale"] <= 14:
-                                    rec["flags"].append("URGENT")
-                                elif rec["days_until_sale"] <= 30:
-                                    rec["flags"].append("AUCTION SOON")
-                        except Exception:
-                            pass
+                        sd = parse_date(rec["sale_date"])
+                        if sd:
+                            days = (sd - TODAY).days
+                            if days <= 14: flags.append("URGENT")
+                            elif days <= 30: flags.append("AUCTION SOON")
+                    rec.update({
+                        "is_new": True, "run_ts": RUN_TIMESTAMP,
+                        "score": 5, "flags": flags,
+                        "absentee": False, "duplicate": False,
+                        "days_until_sale": days,
+                        "loan_amount": "", "loan_date": "", "lender": "",
+                        "trustee": "", "appraised_value": "", "annual_taxes": "",
+                        "mail_addr": "", "ps_doc_id": "",
+                    })
                     new_records.append(rec)
                     page_new += 1
-                    total_new += 1
 
-            log.info(f"  offset={offset} | {page_new} new | {total_new} total new so far")
+            log.info(f"offset={offset} | {page_new} new added | {len(new_records)} total")
 
             if len(page_records) == 0:
                 consecutive_empty += 1
@@ -270,30 +225,25 @@ def scrape_publicsearch(known_docs):
                 consecutive_empty = 0
 
             if consecutive_empty >= 2:
-                log.info(f"  2 consecutive empty pages — stopping")
+                log.info("2 empty pages — stopping")
                 break
-
-            if len(page_records) < 50:
-                log.info(f"  Last page (fewer than 50 results) — stopping")
+            if len(page_records) > 0 and len(page_records) < 50:
+                log.info("Last page — stopping")
                 break
 
             offset += 50
             time.sleep(1.5)
 
     except Exception as e:
-        log.error(f"Scraper error: {e}")
+        log.error(f"Scraper error: {e}", exc_info=True)
     finally:
         if driver:
-            try:
-                driver.quit()
-            except Exception:
-                pass
+            try: driver.quit()
+            except Exception: pass
 
-    log.info(f"PublicSearch: {len(new_records)} new Nueces records")
+    log.info(f"PublicSearch total: {len(new_records)} new records")
     return new_records
 
-
-# ── LOAD / SAVE ───────────────────────────────────────────────────────────────
 def load_known_docs():
     try:
         existing = json.loads(RECORDS_PATH.read_text())
@@ -303,7 +253,6 @@ def load_known_docs():
         log.info("No existing records — starting fresh")
         return set(), []
 
-
 def write_records(records):
     RECORDS_PATH.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(records)
@@ -312,22 +261,10 @@ def write_records(records):
     tmp.write_text(text)
     tmp.replace(RECORDS_PATH)
 
-
-# ── SCORE ─────────────────────────────────────────────────────────────────────
-def score_record(r):
-    s = 5
-    if r.get("absentee"):      s += 2
-    if r.get("type") == "TAX": s += 1
-    if r.get("days_until_sale") is not None and r["days_until_sale"] <= 14: s += 2
-    elif r.get("days_until_sale") is not None and r["days_until_sale"] <= 30: s += 1
-    return min(s, 10)
-
-
-# ── MAIN ──────────────────────────────────────────────────────────────────────
 def main():
     log.info("=" * 60)
-    log.info("Nueces County Lead Scraper v1.1")
-    log.info(f"Run: {RUN_TIMESTAMP} | Cutoff: {CUTOFF} (21 days)")
+    log.info("Nueces County Lead Scraper v1.2")
+    log.info(f"Cutoff: {CUTOFF} (21 days) | Today: {TODAY}")
     log.info("=" * 60)
 
     known_docs, prev_records = load_known_docs()
@@ -338,24 +275,24 @@ def main():
 
     seen = {}
     for r in new_records + prev_records:
-        doc = r.get("doc_number", "")
+        doc = r.get("doc_number","")
         if doc and doc not in seen:
             seen[doc] = r
     records = list(seen.values())
-    log.info(f"After merge: {len(records)} total records")
 
     for r in records:
-        r["score"] = score_record(r)
+        s = 5
+        if r.get("days_until_sale") is not None:
+            if r["days_until_sale"] <= 14: s += 2
+            elif r["days_until_sale"] <= 30: s += 1
+        r["score"] = min(s, 10)
 
-    new_ct = sum(1 for r in records if r.get("is_new"))
-    nof_ct = sum(1 for r in records if r.get("type") == "NOF")
-    urgent = sum(1 for r in records if "URGENT" in r.get("flags", []))
-    log.info(f"Final: {len(records)} total | {new_ct} new | {nof_ct} NOF | {urgent} URGENT")
-
+    new_ct  = sum(1 for r in records if r.get("is_new"))
+    urgent  = sum(1 for r in records if "URGENT" in r.get("flags",[]))
+    log.info(f"Final: {len(records)} total | {new_ct} new | {urgent} URGENT")
     write_records(records)
     log.info(f"Dashboard: {len(records)} records, {RECORDS_PATH.stat().st_size:,} bytes")
     log.info("Done.")
-
 
 if __name__ == "__main__":
     main()
