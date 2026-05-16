@@ -1,6 +1,8 @@
 """
-Nueces County Motivated Seller Lead Scraper v1.10 - DIAGNOSTIC
-Logs ALL links and clickable elements from rendered page to find doc ID pattern
+Nueces County Motivated Seller Lead Scraper v2.0
+FINAL: Internal IDs found as 3xxxxxxxx numbers in page source.
+Extract them in order, pair with table rows by index.
+Then visit /doc/{id} for party names.
 """
 
 import json, logging, re, time
@@ -17,6 +19,7 @@ RECORDS_PATH      = Path("dashboard/records.json")
 RUN_TIMESTAMP     = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 TODAY             = datetime.now(timezone.utc).date()
 CUTOFF            = TODAY - timedelta(days=21)
+ENRICH_LIMIT      = 60
 
 def get_driver():
     from selenium import webdriver
@@ -43,105 +46,125 @@ def parse_date(s):
         pass
     return None
 
-def diagnostic_page(driver, url):
-    """Load page and log everything useful for finding doc IDs."""
+def wait_and_get(driver, url, wait_sel="table tr td", timeout=30, sleep=3):
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.common.by import By
-
     driver.get(url)
     try:
-        WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "table tr td")))
-        time.sleep(4)
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, wait_sel)))
+        time.sleep(sleep)
     except Exception:
-        time.sleep(6)
+        time.sleep(sleep + 2)
+    return driver.page_source
 
-    # 1. All anchor hrefs
-    hrefs = driver.execute_script("return Array.from(document.querySelectorAll('a')).map(a => a.href).filter(h => h && !h.includes('fonts') && !h.includes('.css') && !h.includes('.js'));")
-    log.info(f"All anchor hrefs: {hrefs[:20]}")
+def extract_internal_ids(src):
+    """Extract 3xxxxxxxx internal IDs from page source, deduplicated in order."""
+    ids = re.findall(r'\b(3\d{8})\b', src)
+    seen = set()
+    unique = []
+    for i in ids:
+        if i not in seen:
+            seen.add(i)
+            unique.append(i)
+    return unique
 
-    # 2. All data attributes on table rows/cells
-    data_attrs = driver.execute_script("""
-        var els = document.querySelectorAll('tr, td, [data-id], [data-docid], [data-doc]');
-        var attrs = [];
-        for (var el of els) {
-            var d = {};
-            for (var a of el.attributes) {
-                if (a.name.startsWith('data-') || a.name === 'id') {
-                    d[a.name] = a.value;
-                }
-            }
-            if (Object.keys(d).length > 0) attrs.push(d);
-        }
-        return attrs.slice(0, 20);
-    """)
-    log.info(f"Data attrs on rows/cells: {data_attrs}")
+def extract_table_rows(src, known_docs, skip_known=True):
+    """Extract doc records from table HTML."""
+    records = []
+    rows = re.findall(r'<tr[^>]*>(.*?)</tr>', src, re.DOTALL | re.IGNORECASE)
+    for row in rows:
+        if re.search(r'<th|thead|DOC.TYPE|RECORDED.DATE', row, re.IGNORECASE):
+            continue
+        cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
+        cells = [re.sub(r'<[^>]+>', '', c).strip() for c in cells if c.strip()]
+        if len(cells) < 3:
+            continue
+        doc_num = next((c for c in cells if re.match(r'^\d{9,12}$', c.strip())), "")
+        if not doc_num:
+            continue
+        if skip_known and doc_num in known_docs:
+            continue
+        dates = [c for c in cells if re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', c.strip())]
+        address = next((c for c in cells
+            if len(c) > 8 and c not in dates
+            and not re.match(r'^\d{9,12}$', c)
+            and 'FORECLOSURE' not in c.upper()
+            and c.upper() not in ('N/A','')), "N/A")
+        records.append({
+            "doc_number": doc_num, "internal_id": "",
+            "address": address,
+            "date_filed": dates[0] if dates else "",
+            "sale_date": dates[1] if len(dates) > 1 else "",
+        })
+    return records
 
-    # 3. Window __data docPreview
-    doc_preview = driver.execute_script("try { return JSON.stringify(window.__data && window.__data.docPreview); } catch(e) { return null; }")
-    log.info(f"window.__data.docPreview: {str(doc_preview)[:200] if doc_preview else 'none'}")
+def get_party_from_detail(driver, internal_id):
+    """Visit /doc/{id} and extract grantor from page source 3xxxxxxxx JSON."""
+    url = f"{PUBLICSEARCH_BASE}/doc/{internal_id}"
+    src = wait_and_get(driver, url, wait_sel="table, [class*='summary'], h1", timeout=20, sleep=2)
 
-    # 4. Window __data workspaces
-    workspaces = driver.execute_script("try { return JSON.stringify(window.__data && window.__data.workspaces); } catch(e) { return null; }")
-    log.info(f"workspaces keys: {str(workspaces)[:300] if workspaces else 'none'}")
+    # The detail page source contains parties in JSON format
+    # Look for "parties":[{"name":"..."}] pattern
+    party_m = re.search(r'"parties"\s*:\s*\[([^\]]{0,500})\]', src)
+    if party_m:
+        name_m = re.search(r'"name"\s*:\s*"([^"]{3,60})"', party_m.group(1))
+        if name_m:
+            return name_m.group(1).strip()
 
-    # 5. Search state
-    search_state = driver.execute_script("""
-        try {
-            var ws = window.__data && window.__data.workspaces;
-            if (!ws) return null;
-            var tabs = ws.tabs;
-            if (!tabs) return null;
-            var keys = Object.keys(tabs);
-            for (var k of keys) {
-                var tab = tabs[k];
-                if (tab && tab.searchResults) return JSON.stringify(tab.searchResults).slice(0, 500);
-                if (tab && tab.results) return JSON.stringify(tab.results).slice(0, 500);
-            }
-            return JSON.stringify(ws).slice(0, 300);
-        } catch(e) { return 'err:'+e.message; }
-    """)
-    log.info(f"Search results in state: {search_state}")
+    # Try broader search for name near grantor/mortgagor
+    for label in ["grantor","mortgagor","trustor","borrower","debtor"]:
+        m = re.search(
+            rf'"{label}[^"]*"\s*:\s*"([A-Z][^"{{}}]{{3,60}})"',
+            src, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
 
-    # 6. Check if Redux store is available
-    redux = driver.execute_script("""
-        try {
-            var stores = Object.keys(window).filter(k => window[k] && typeof window[k].getState === 'function');
-            if (stores.length === 0) return 'no stores';
-            var state = window[stores[0]].getState();
-            var keys = Object.keys(state);
-            return 'store keys: ' + keys.join(', ');
-        } catch(e) { return 'err:'+e.message; }
-    """)
-    log.info(f"Redux: {redux}")
+    # Try rendered DOM text via JS
+    try:
+        name = driver.execute_script("""
+            try {
+                var src = document.documentElement.innerHTML;
+                var m = src.match(/"parties":\[{"name":"([^"]{3,60})"/);
+                if (m) return m[1];
+                var m2 = src.match(/"name":"([A-Z][A-Z &,.']{4,50})","type":"(?:grantor|mortgagor)"/i);
+                if (m2) return m2[1];
+                return '';
+            } catch(e) { return ''; }
+        """)
+        if name:
+            return name.strip()
+    except Exception:
+        pass
 
-    # 7. Look for document IDs in page source directly
-    src = driver.page_source
-    # Find any large numbers that could be internal IDs (7-9 digits)
-    large_nums = re.findall(r'\b(3\d{8})\b', src)
-    unique_large = list(dict.fromkeys(large_nums))[:10]
-    log.info(f"Large nums (3xxxxxxxx pattern) in src: {unique_large}")
+    return ""
 
-    # 8. Find instNum or documentId patterns in page source
-    inst_nums = re.findall(r'"(?:id|instNum|documentId|docId)"\s*:\s*(\d{6,12})', src)
-    log.info(f"id/instNum in JSON: {inst_nums[:10]}")
+def get_address_from_detail(src):
+    """Extract property address from detail page source."""
+    addr_m = re.search(r'"propAddress"\s*:\s*\[([^\]]{0,300})\]', src)
+    if addr_m:
+        a1 = re.search(r'"address1"\s*:\s*"([^"]{3,60})"', addr_m.group(1))
+        city = re.search(r'"city"\s*:\s*"([^"]{2,30})"', addr_m.group(1))
+        if a1:
+            parts = [a1.group(1)]
+            if city: parts.append(city.group(1))
+            parts.append("TX")
+            return " ".join(parts)
+    return ""
 
-def scrape_publicsearch(known_docs):
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.common.by import By
-
-    new_records = []
+def scrape_and_map(known_docs):
+    """Scrape search results, extract doc numbers AND internal IDs."""
     driver = None
+    all_records = []
+    doc_id_map = {}  # doc_number -> internal_id
     cutoff_str = CUTOFF.strftime("%Y%m%d")
-    today_str  = TODAY.strftime("%Y%m%d")
+    today_str = TODAY.strftime("%Y%m%d")
 
     try:
         driver = get_driver()
         offset = 0
         consecutive_empty = 0
-        first_page = True
 
         while True:
             url = (f"{PUBLICSEARCH_BASE}/results"
@@ -149,66 +172,30 @@ def scrape_publicsearch(known_docs):
                    f"&instrumentDateRange={cutoff_str}%2C{today_str}"
                    f"&keywordSearch=false&offset={offset}")
             log.info(f"Fetching offset={offset}")
+            src = wait_and_get(driver, url)
 
-            driver.get(url)
-            try:
-                WebDriverWait(driver, 30).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "table tr td")))
-                time.sleep(3)
-            except Exception:
-                time.sleep(5)
+            # Extract internal IDs from page source (3xxxxxxxx pattern)
+            internal_ids = extract_internal_ids(src)
 
-            # Run diagnostic on first page
-            if first_page:
-                log.info("=== DIAGNOSTIC PAGE 1 ===")
-                diagnostic_page(driver, url)
-                log.info("=== END DIAGNOSTIC ===")
-                first_page = False
-                # Re-navigate since diagnostic may have changed state
-                driver.get(url)
-                try:
-                    WebDriverWait(driver, 30).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "table tr td")))
-                    time.sleep(3)
-                except Exception:
-                    time.sleep(5)
+            # Extract table rows (all, including known — to build ID map)
+            all_rows = extract_table_rows(src, known_docs, skip_known=False)
+            new_rows = [r for r in all_rows if r["doc_number"] not in known_docs]
 
-            src = driver.page_source
+            log.info(f"offset={offset} | rows={len(all_rows)} | internal_ids={len(internal_ids)} | new={len(new_rows)}")
+
+            # Pair internal IDs with doc numbers by index
+            for i, row in enumerate(all_rows):
+                if i < len(internal_ids):
+                    doc_id_map[row["doc_number"]] = internal_ids[i]
+
             count_m = re.search(r'(\d[\d,]*)\s*of\s*(\d[\d,]*)\s*results?', src, re.IGNORECASE)
             if count_m:
                 log.info(f"Results: {count_m.group(0)}")
 
-            page_records = []
-            rows = re.findall(r'<tr[^>]*>(.*?)</tr>', src, re.DOTALL | re.IGNORECASE)
-            for row in rows:
-                if re.search(r'<th|thead|DOC.TYPE|RECORDED.DATE', row, re.IGNORECASE):
-                    continue
-                cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
-                cells = [re.sub(r'<[^>]+>', '', c).strip() for c in cells if c.strip()]
-                if len(cells) < 3:
-                    continue
-                doc_num = next((c for c in cells if re.match(r'^\d{9,12}$', c.strip())), "")
-                if not doc_num or doc_num in known_docs:
-                    continue
-                dates = [c for c in cells if re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', c.strip())]
-                address = next((c for c in cells
-                    if len(c) > 8 and c not in dates
-                    and not re.match(r'^\d{9,12}$', c)
-                    and 'FORECLOSURE' not in c.upper()
-                    and c.upper() not in ('N/A','')), "N/A")
-                page_records.append({
-                    "doc_number": doc_num, "internal_id": "",
-                    "type": "NOF", "source": "publicsearch", "county": "nueces",
-                    "address": address, "city": "CORPUS CHRISTI", "zip": "",
-                    "owner": "", "date_filed": dates[0] if dates else "",
-                    "sale_date": dates[1] if len(dates) > 1 else "",
-                })
-
-            log.info(f"offset={offset} | {len(page_records)} new")
-            for rec in page_records:
-                doc = rec["doc_number"]
-                if doc not in known_docs:
-                    known_docs.add(doc)
+            # Add new records
+            for rec in new_rows:
+                if rec["doc_number"] not in known_docs:
+                    known_docs.add(rec["doc_number"])
                     flags, days = [], None
                     if rec.get("sale_date"):
                         sd = parse_date(rec["sale_date"])
@@ -217,6 +204,8 @@ def scrape_publicsearch(known_docs):
                             if days <= 14: flags.append("URGENT")
                             elif days <= 30: flags.append("AUCTION SOON")
                     rec.update({
+                        "type": "NOF", "source": "publicsearch", "county": "nueces",
+                        "city": "CORPUS CHRISTI", "zip": "", "owner": "",
                         "is_new": True, "run_ts": RUN_TIMESTAMP,
                         "score": 5, "flags": flags, "absentee": False,
                         "duplicate": False, "days_until_sale": days,
@@ -224,16 +213,20 @@ def scrape_publicsearch(known_docs):
                         "trustee": "", "appraised_value": "", "annual_taxes": "",
                         "mail_addr": "", "ps_doc_id": "",
                     })
-                    new_records.append(rec)
+                    all_records.append(rec)
 
-            if len(page_records) == 0:
+            if len(all_rows) == 0:
                 consecutive_empty += 1
             else:
                 consecutive_empty = 0
-            if consecutive_empty >= 2 or (0 < len(page_records) < 50):
+            if consecutive_empty >= 2 or (0 < len(all_rows) < 50):
                 break
             offset += 50
             time.sleep(1.5)
+
+        log.info(f"doc_id_map built: {len(doc_id_map)} entries")
+        sample = list(doc_id_map.items())[:3]
+        log.info(f"Sample mappings: {sample}")
 
     except Exception as e:
         log.error(f"Scraper error: {e}", exc_info=True)
@@ -242,7 +235,53 @@ def scrape_publicsearch(known_docs):
             try: driver.quit()
             except Exception: pass
 
-    return new_records
+    return all_records, doc_id_map
+
+def enrich_records(records, doc_id_map):
+    """Visit detail pages for records missing owner names."""
+    bad = {'Window.','Window','Search Results','Nueces County','Document Preview'}
+    for r in records:
+        if r.get("owner","") in bad:
+            r["owner"] = ""
+        # Update internal_id from map
+        if not r.get("internal_id") and r.get("doc_number") in doc_id_map:
+            r["internal_id"] = doc_id_map[r["doc_number"]]
+
+    needs = [r for r in records if not r.get("owner") and r.get("internal_id")][:ENRICH_LIMIT]
+    log.info(f"Enriching {len(needs)} records with detail page data...")
+
+    if not needs:
+        no_id = sum(1 for r in records if not r.get("owner"))
+        log.info(f"No records to enrich ({no_id} missing names but no internal_id)")
+        return 0
+
+    driver = None
+    enriched = 0
+    try:
+        driver = get_driver()
+        for i, rec in enumerate(needs):
+            grantor = get_party_from_detail(driver, rec["internal_id"])
+            if grantor:
+                rec["owner"] = grantor.title()
+                enriched += 1
+            # Also try to get address
+            if rec.get("address") in ("N/A", "", None):
+                src = driver.page_source
+                addr = get_address_from_detail(src)
+                if addr:
+                    rec["address"] = addr
+            if (i+1) % 10 == 0:
+                log.info(f"  {i+1}/{len(needs)} | {enriched} named")
+            time.sleep(0.8)
+    except Exception as e:
+        log.error(f"Enrichment error: {e}")
+    finally:
+        if driver:
+            try: driver.quit()
+            except Exception: pass
+
+    log.info(f"Enrichment: {enriched}/{len(needs)} named")
+    return enriched
 
 def load_known_docs():
     try:
@@ -262,16 +301,12 @@ def write_records(records):
 
 def main():
     log.info("=" * 60)
-    log.info("Nueces County Lead Scraper v1.10 DIAGNOSTIC")
-    log.info(f"Cutoff: {CUTOFF} | Today: {TODAY}")
+    log.info("Nueces County Lead Scraper v2.0")
+    log.info(f"Cutoff: {CUTOFF} (21 days) | Today: {TODAY}")
     log.info("=" * 60)
 
     known_docs, prev_records = load_known_docs()
-    # Clear known_docs so we force a fresh page load with diagnostic
-    known_docs_backup = set(known_docs)
-    known_docs_empty = set()  # Use empty set so first page loads with content
-
-    new_records = scrape_publicsearch(known_docs_empty)
+    new_records, doc_id_map = scrape_and_map(known_docs)
 
     for r in prev_records:
         r["is_new"] = False
@@ -282,11 +317,23 @@ def main():
         if doc and doc not in seen:
             seen[doc] = r
     records = list(seen.values())
+    log.info(f"After merge: {len(records)} total | {len(doc_id_map)} IDs mapped")
 
-    named = sum(1 for r in records if r.get("owner"))
+    enrich_records(records, doc_id_map)
+
+    for r in records:
+        s = 5
+        if r.get("days_until_sale") is not None:
+            if r["days_until_sale"] <= 14: s += 2
+            elif r["days_until_sale"] <= 30: s += 1
+        r["score"] = min(s, 10)
+
+    new_ct = sum(1 for r in records if r.get("is_new"))
+    named  = sum(1 for r in records if r.get("owner"))
     urgent = sum(1 for r in records if "URGENT" in r.get("flags",[]))
-    log.info(f"Final: {len(records)} total | {named} named | {urgent} URGENT")
+    log.info(f"Final: {len(records)} total | {new_ct} new | {named} named | {urgent} URGENT")
     write_records(records)
+    log.info(f"Dashboard: {len(records)} records, {RECORDS_PATH.stat().st_size:,} bytes")
     log.info("Done.")
 
 if __name__ == "__main__":
