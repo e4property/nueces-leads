@@ -1,8 +1,9 @@
 """
-Nueces County Motivated Seller Lead Scraper v2.0
-FINAL: Internal IDs found as 3xxxxxxxx numbers in page source.
-Extract them in order, pair with table rows by index.
-Then visit /doc/{id} for party names.
+Nueces County Motivated Seller Lead Scraper v2.1
+KEY FIX: Use Selenium execute_async_script to fetch() the API from within
+the browser session — avoids 403 since browser has valid auth cookies.
+The doc_id_map approach works (confirmed v2.0). Party extraction was failing
+because data loads async. Now we fetch it directly via browser's fetch().
 """
 
 import json, logging, re, time
@@ -19,7 +20,7 @@ RECORDS_PATH      = Path("dashboard/records.json")
 RUN_TIMESTAMP     = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 TODAY             = datetime.now(timezone.utc).date()
 CUTOFF            = TODAY - timedelta(days=21)
-ENRICH_LIMIT      = 60
+ENRICH_LIMIT      = 100
 
 def get_driver():
     from selenium import webdriver
@@ -60,7 +61,6 @@ def wait_and_get(driver, url, wait_sel="table tr td", timeout=30, sleep=3):
     return driver.page_source
 
 def extract_internal_ids(src):
-    """Extract 3xxxxxxxx internal IDs from page source, deduplicated in order."""
     ids = re.findall(r'\b(3\d{8})\b', src)
     seen = set()
     unique = []
@@ -71,7 +71,6 @@ def extract_internal_ids(src):
     return unique
 
 def extract_table_rows(src, known_docs, skip_known=True):
-    """Extract doc records from table HTML."""
     records = []
     rows = re.findall(r'<tr[^>]*>(.*?)</tr>', src, re.DOTALL | re.IGNORECASE)
     for row in rows:
@@ -100,64 +99,69 @@ def extract_table_rows(src, known_docs, skip_known=True):
         })
     return records
 
-def get_party_from_detail(driver, internal_id):
-    """Visit /doc/{id} and extract grantor from page source 3xxxxxxxx JSON."""
-    url = f"{PUBLICSEARCH_BASE}/doc/{internal_id}"
-    src = wait_and_get(driver, url, wait_sel="table, [class*='summary'], h1", timeout=20, sleep=2)
-
-    # The detail page source contains parties in JSON format
-    # Look for "parties":[{"name":"..."}] pattern
-    party_m = re.search(r'"parties"\s*:\s*\[([^\]]{0,500})\]', src)
-    if party_m:
-        name_m = re.search(r'"name"\s*:\s*"([^"]{3,60})"', party_m.group(1))
-        if name_m:
-            return name_m.group(1).strip()
-
-    # Try broader search for name near grantor/mortgagor
-    for label in ["grantor","mortgagor","trustor","borrower","debtor"]:
-        m = re.search(
-            rf'"{label}[^"]*"\s*:\s*"([A-Z][^"{{}}]{{3,60}})"',
-            src, re.IGNORECASE)
-        if m:
-            return m.group(1).strip()
-
-    # Try rendered DOM text via JS
+def fetch_doc_via_browser(driver, internal_id):
+    """
+    Use the browser's fetch() API to call /api/documents/{id}.
+    The browser has valid session cookies so won't get 403.
+    Returns (grantor, address) tuple.
+    """
+    # First navigate to the search page to ensure valid session
+    js = f"""
+    var done = arguments[0];
+    fetch('/api/documents/{internal_id}', {{
+        method: 'GET',
+        headers: {{
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }},
+        credentials: 'include'
+    }})
+    .then(function(r) {{ return r.json(); }})
+    .then(function(data) {{
+        var result = {{grantor: '', address: ''}};
+        // Try parties array
+        var parties = data.parties || (data.data && data.data.parties) || [];
+        for (var i = 0; i < parties.length; i++) {{
+            var p = parties[i];
+            if (p && p.name && p.name.length > 2) {{
+                result.grantor = p.name;
+                break;
+            }}
+        }}
+        // Try propAddress
+        var addrs = data.propAddress || (data.data && data.data.propAddress) || [];
+        if (addrs && addrs.length > 0) {{
+            var a = addrs[0];
+            result.address = (a.address1 || '') + ' ' + (a.city || '') + ' ' + (a.state || '');
+            result.address = result.address.trim();
+        }}
+        // Also check top-level fields
+        if (!result.grantor) {{
+            result.grantor = data.grantorName || data.grantor || '';
+        }}
+        // Log full response for first doc
+        result.raw_keys = Object.keys(data).join(',');
+        result.parties_count = parties.length;
+        done(JSON.stringify(result));
+    }})
+    .catch(function(e) {{
+        done(JSON.stringify({{error: e.toString(), grantor: '', address: ''}}));
+    }});
+    """
     try:
-        name = driver.execute_script("""
-            try {
-                var src = document.documentElement.innerHTML;
-                var m = src.match(/"parties":\[{"name":"([^"]{3,60})"/);
-                if (m) return m[1];
-                var m2 = src.match(/"name":"([A-Z][A-Z &,.']{4,50})","type":"(?:grantor|mortgagor)"/i);
-                if (m2) return m2[1];
-                return '';
-            } catch(e) { return ''; }
-        """)
-        if name:
-            return name.strip()
-    except Exception:
-        pass
-
-    return ""
-
-def get_address_from_detail(src):
-    """Extract property address from detail page source."""
-    addr_m = re.search(r'"propAddress"\s*:\s*\[([^\]]{0,300})\]', src)
-    if addr_m:
-        a1 = re.search(r'"address1"\s*:\s*"([^"]{3,60})"', addr_m.group(1))
-        city = re.search(r'"city"\s*:\s*"([^"]{2,30})"', addr_m.group(1))
-        if a1:
-            parts = [a1.group(1)]
-            if city: parts.append(city.group(1))
-            parts.append("TX")
-            return " ".join(parts)
-    return ""
+        result_str = driver.execute_async_script(js)
+        result = json.loads(result_str)
+        if result.get("error"):
+            log.debug(f"Fetch error for {internal_id}: {result['error']}")
+        return result.get("grantor","").strip(), result.get("address","").strip(), result
+    except Exception as e:
+        log.debug(f"execute_async_script error for {internal_id}: {e}")
+        return "", "", {}
 
 def scrape_and_map(known_docs):
-    """Scrape search results, extract doc numbers AND internal IDs."""
     driver = None
-    all_records = []
-    doc_id_map = {}  # doc_number -> internal_id
+    all_new_records = []
+    doc_id_map = {}
     cutoff_str = CUTOFF.strftime("%Y%m%d")
     today_str = TODAY.strftime("%Y%m%d")
 
@@ -174,25 +178,18 @@ def scrape_and_map(known_docs):
             log.info(f"Fetching offset={offset}")
             src = wait_and_get(driver, url)
 
-            # Extract internal IDs from page source (3xxxxxxxx pattern)
             internal_ids = extract_internal_ids(src)
-
-            # Extract table rows (all, including known — to build ID map)
             all_rows = extract_table_rows(src, known_docs, skip_known=False)
             new_rows = [r for r in all_rows if r["doc_number"] not in known_docs]
 
-            log.info(f"offset={offset} | rows={len(all_rows)} | internal_ids={len(internal_ids)} | new={len(new_rows)}")
+            count_m = re.search(r'(\d[\d,]*)\s*of\s*(\d[\d,]*)\s*results?', src, re.IGNORECASE)
+            if count_m:
+                log.info(f"Results: {count_m.group(0)} | rows={len(all_rows)} | ids={len(internal_ids)} | new={len(new_rows)}")
 
-            # Pair internal IDs with doc numbers by index
             for i, row in enumerate(all_rows):
                 if i < len(internal_ids):
                     doc_id_map[row["doc_number"]] = internal_ids[i]
 
-            count_m = re.search(r'(\d[\d,]*)\s*of\s*(\d[\d,]*)\s*results?', src, re.IGNORECASE)
-            if count_m:
-                log.info(f"Results: {count_m.group(0)}")
-
-            # Add new records
             for rec in new_rows:
                 if rec["doc_number"] not in known_docs:
                     known_docs.add(rec["doc_number"])
@@ -213,7 +210,7 @@ def scrape_and_map(known_docs):
                         "trustee": "", "appraised_value": "", "annual_taxes": "",
                         "mail_addr": "", "ps_doc_id": "",
                     })
-                    all_records.append(rec)
+                    all_new_records.append(rec)
 
             if len(all_rows) == 0:
                 consecutive_empty += 1
@@ -224,9 +221,7 @@ def scrape_and_map(known_docs):
             offset += 50
             time.sleep(1.5)
 
-        log.info(f"doc_id_map built: {len(doc_id_map)} entries")
-        sample = list(doc_id_map.items())[:3]
-        log.info(f"Sample mappings: {sample}")
+        log.info(f"doc_id_map: {len(doc_id_map)} entries | new records: {len(all_new_records)}")
 
     except Exception as e:
         log.error(f"Scraper error: {e}", exc_info=True)
@@ -235,44 +230,54 @@ def scrape_and_map(known_docs):
             try: driver.quit()
             except Exception: pass
 
-    return all_records, doc_id_map
+    return all_new_records, doc_id_map
 
 def enrich_records(records, doc_id_map):
-    """Visit detail pages for records missing owner names."""
     bad = {'Window.','Window','Search Results','Nueces County','Document Preview'}
     for r in records:
         if r.get("owner","") in bad:
             r["owner"] = ""
-        # Update internal_id from map
         if not r.get("internal_id") and r.get("doc_number") in doc_id_map:
             r["internal_id"] = doc_id_map[r["doc_number"]]
 
     needs = [r for r in records if not r.get("owner") and r.get("internal_id")][:ENRICH_LIMIT]
-    log.info(f"Enriching {len(needs)} records with detail page data...")
+    log.info(f"Enriching {len(needs)} records via browser fetch()...")
 
     if not needs:
-        no_id = sum(1 for r in records if not r.get("owner"))
-        log.info(f"No records to enrich ({no_id} missing names but no internal_id)")
+        log.info("No records to enrich")
         return 0
 
     driver = None
     enriched = 0
     try:
         driver = get_driver()
-        for i, rec in enumerate(needs):
-            grantor = get_party_from_detail(driver, rec["internal_id"])
+        # Navigate to base page first to establish session
+        driver.get(f"{PUBLICSEARCH_BASE}/")
+        time.sleep(2)
+
+        # Test first record and log full response
+        test_rec = needs[0]
+        log.info(f"Testing API fetch for doc {test_rec['doc_number']} internal_id {test_rec['internal_id']}...")
+        grantor, address, raw = fetch_doc_via_browser(driver, test_rec["internal_id"])
+        log.info(f"Test result: grantor='{grantor}' | address='{address}'")
+        log.info(f"API response keys: {raw.get('raw_keys','?')} | parties_count: {raw.get('parties_count','?')}")
+
+        if grantor:
+            test_rec["owner"] = grantor.title()
+            enriched += 1
+
+        # Process remaining
+        for i, rec in enumerate(needs[1:], 1):
+            grantor, address, _ = fetch_doc_via_browser(driver, rec["internal_id"])
             if grantor:
                 rec["owner"] = grantor.title()
                 enriched += 1
-            # Also try to get address
-            if rec.get("address") in ("N/A", "", None):
-                src = driver.page_source
-                addr = get_address_from_detail(src)
-                if addr:
-                    rec["address"] = addr
-            if (i+1) % 10 == 0:
+            if address and len(address) > 5:
+                rec["address"] = address
+            if (i+1) % 20 == 0:
                 log.info(f"  {i+1}/{len(needs)} | {enriched} named")
-            time.sleep(0.8)
+            time.sleep(0.3)
+
     except Exception as e:
         log.error(f"Enrichment error: {e}")
     finally:
@@ -301,7 +306,7 @@ def write_records(records):
 
 def main():
     log.info("=" * 60)
-    log.info("Nueces County Lead Scraper v2.0")
+    log.info("Nueces County Lead Scraper v2.1")
     log.info(f"Cutoff: {CUTOFF} (21 days) | Today: {TODAY}")
     log.info("=" * 60)
 
