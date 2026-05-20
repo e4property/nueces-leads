@@ -1,9 +1,8 @@
 """
-Nueces County Motivated Seller Lead Scraper v2.1
-KEY FIX: Use Selenium execute_async_script to fetch() the API from within
-the browser session — avoids 403 since browser has valid auth cookies.
-The doc_id_map approach works (confirmed v2.0). Party extraction was failing
-because data loads async. Now we fetch it directly via browser's fetch().
+Nueces County Motivated Seller Lead Scraper v2.2
+NEW APPROACH: Get owner names from Nueces CAD (esearch.nuecescad.net)
+using address/legal description search — same BIS platform as Bexar CAD.
+Search by street address or legal description to get owner name + appraised value.
 """
 
 import json, logging, re, time
@@ -16,11 +15,12 @@ logging.basicConfig(level=logging.INFO,
 log = logging.getLogger(__name__)
 
 PUBLICSEARCH_BASE = "https://nueces.tx.publicsearch.us"
+NUECES_CAD        = "https://esearch.nuecescad.net"
 RECORDS_PATH      = Path("dashboard/records.json")
 RUN_TIMESTAMP     = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 TODAY             = datetime.now(timezone.utc).date()
 CUTOFF            = TODAY - timedelta(days=21)
-ENRICH_LIMIT      = 100
+ENRICH_LIMIT      = 60
 
 def get_driver():
     from selenium import webdriver
@@ -62,8 +62,7 @@ def wait_and_get(driver, url, wait_sel="table tr td", timeout=30, sleep=3):
 
 def extract_internal_ids(src):
     ids = re.findall(r'\b(3\d{8})\b', src)
-    seen = set()
-    unique = []
+    seen, unique = set(), []
     for i in ids:
         if i not in seen:
             seen.add(i)
@@ -99,64 +98,65 @@ def extract_table_rows(src, known_docs, skip_known=True):
         })
     return records
 
-def fetch_doc_via_browser(driver, internal_id):
+def cad_search(driver, query, search_type="address"):
     """
-    Use the browser's fetch() API to call /api/documents/{id}.
-    The browser has valid session cookies so won't get 403.
-    Returns (grantor, address) tuple.
+    Search Nueces CAD for owner name and appraised value.
+    Returns (owner, appraised_value) or ("", "")
     """
-    # First navigate to the search page to ensure valid session
-    js = f"""
-    var done = arguments[0];
-    fetch('/api/documents/{internal_id}', {{
-        method: 'GET',
-        headers: {{
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        }},
-        credentials: 'include'
-    }})
-    .then(function(r) {{ return r.json(); }})
-    .then(function(data) {{
-        var result = {{grantor: '', address: ''}};
-        // Try parties array
-        var parties = data.parties || (data.data && data.data.parties) || [];
-        for (var i = 0; i < parties.length; i++) {{
-            var p = parties[i];
-            if (p && p.name && p.name.length > 2) {{
-                result.grantor = p.name;
-                break;
-            }}
-        }}
-        // Try propAddress
-        var addrs = data.propAddress || (data.data && data.data.propAddress) || [];
-        if (addrs && addrs.length > 0) {{
-            var a = addrs[0];
-            result.address = (a.address1 || '') + ' ' + (a.city || '') + ' ' + (a.state || '');
-            result.address = result.address.trim();
-        }}
-        // Also check top-level fields
-        if (!result.grantor) {{
-            result.grantor = data.grantorName || data.grantor || '';
-        }}
-        // Log full response for first doc
-        result.raw_keys = Object.keys(data).join(',');
-        result.parties_count = parties.length;
-        done(JSON.stringify(result));
-    }})
-    .catch(function(e) {{
-        done(JSON.stringify({{error: e.toString(), grantor: '', address: ''}}));
-    }});
-    """
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.common.by import By
+
+    import urllib.parse
+    encoded = urllib.parse.quote(query)
+    url = f"{NUECES_CAD}/Property/SearchResults?searchType={search_type}&searchText={encoded}&take=5&skip=0"
+
     try:
-        result_str = driver.execute_async_script(js)
-        result = json.loads(result_str)
-        if result.get("error"):
-            log.debug(f"Fetch error for {internal_id}: {result['error']}")
-        return result.get("grantor","").strip(), result.get("address","").strip(), result
+        driver.get(url)
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR,
+                ".search-results, table, .property-card, [class*='result'], .no-results")))
+        time.sleep(1.5)
+        src = driver.page_source
+
+        # Extract owner name from results
+        owner = ""
+        appraised = ""
+
+        # BIS platform returns results as JSON in page or as HTML table
+        # Try JSON first
+        json_m = re.search(r'"ownerName"\s*:\s*"([^"]{3,60})"', src)
+        if json_m:
+            owner = json_m.group(1).strip()
+
+        if not owner:
+            json_m2 = re.search(r'"Owner"\s*:\s*"([^"]{3,60})"', src)
+            if json_m2:
+                owner = json_m2.group(1).strip()
+
+        # Try HTML table
+        if not owner:
+            rows = re.findall(r'<tr[^>]*>(.*?)</tr>', src, re.DOTALL | re.IGNORECASE)
+            for row in rows:
+                cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
+                cells = [re.sub(r'<[^>]+>', '', c).strip() for c in cells]
+                for cell in cells:
+                    if re.match(r'^[A-Z][A-Z ,&\.\'\-]{5,50}$', cell) and ' ' in cell:
+                        bad = {'CORPUS CHRISTI', 'NUECES COUNTY', 'TEXAS', 'PROPERTY'}
+                        if cell not in bad:
+                            owner = cell
+                            break
+
+        # Extract appraised value
+        val_m = re.search(r'"(?:TotalValue|AppraisedValue|totalAppraised)"\s*:\s*(\d+)', src)
+        if val_m:
+            appraised = f"${int(val_m.group(1)):,}"
+
+        return owner, appraised
+
     except Exception as e:
-        log.debug(f"execute_async_script error for {internal_id}: {e}")
-        return "", "", {}
+        log.debug(f"CAD search error for '{query}': {e}")
+        return "", ""
 
 def scrape_and_map(known_docs):
     driver = None
@@ -221,7 +221,7 @@ def scrape_and_map(known_docs):
             offset += 50
             time.sleep(1.5)
 
-        log.info(f"doc_id_map: {len(doc_id_map)} entries | new records: {len(all_new_records)}")
+        log.info(f"doc_id_map: {len(doc_id_map)} entries | new: {len(all_new_records)}")
 
     except Exception as e:
         log.error(f"Scraper error: {e}", exc_info=True)
@@ -232,60 +232,71 @@ def scrape_and_map(known_docs):
 
     return all_new_records, doc_id_map
 
-def enrich_records(records, doc_id_map):
+def enrich_from_cad(records):
+    """Search Nueces CAD for owner names using property address/legal description."""
     bad = {'Window.','Window','Search Results','Nueces County','Document Preview'}
     for r in records:
         if r.get("owner","") in bad:
             r["owner"] = ""
-        if not r.get("internal_id") and r.get("doc_number") in doc_id_map:
-            r["internal_id"] = doc_id_map[r["doc_number"]]
 
-    needs = [r for r in records if not r.get("owner") and r.get("internal_id")][:ENRICH_LIMIT]
-    log.info(f"Enriching {len(needs)} records via browser fetch()...")
+    needs = [r for r in records if not r.get("owner") and r.get("address","") not in ("N/A","","")]
+    needs = needs[:ENRICH_LIMIT]
+    log.info(f"CAD enrichment: {len(needs)} records to search...")
 
     if not needs:
-        log.info("No records to enrich")
+        log.info("No records with addresses to search CAD")
         return 0
 
     driver = None
     enriched = 0
     try:
         driver = get_driver()
-        # Navigate to base page first to establish session
-        driver.get(f"{PUBLICSEARCH_BASE}/")
-        time.sleep(2)
 
-        # Test first record and log full response
-        test_rec = needs[0]
-        log.info(f"Testing API fetch for doc {test_rec['doc_number']} internal_id {test_rec['internal_id']}...")
-        grantor, address, raw = fetch_doc_via_browser(driver, test_rec["internal_id"])
-        log.info(f"Test result: grantor='{grantor}' | address='{address}'")
-        log.info(f"API response keys: {raw.get('raw_keys','?')} | parties_count: {raw.get('parties_count','?')}")
+        # Test first record
+        test = needs[0]
+        addr = test.get("address","")
+        log.info(f"Testing CAD search for: '{addr}'")
+        owner, appraised = cad_search(driver, addr)
+        log.info(f"CAD test result: owner='{owner}' | appraised='{appraised}'")
 
-        if grantor:
-            test_rec["owner"] = grantor.title()
+        if owner:
+            test["owner"] = owner.title()
+            if appraised:
+                test["appraised_value"] = appraised
             enriched += 1
 
-        # Process remaining
         for i, rec in enumerate(needs[1:], 1):
-            grantor, address, _ = fetch_doc_via_browser(driver, rec["internal_id"])
-            if grantor:
-                rec["owner"] = grantor.title()
+            addr = rec.get("address","")
+            if not addr or addr == "N/A":
+                continue
+
+            # Try full address first, then first part of legal description
+            owner, appraised = cad_search(driver, addr)
+
+            # If no result, try just the subdivision name (first 3 words)
+            if not owner:
+                short = " ".join(addr.split()[:3])
+                if short != addr:
+                    owner, appraised = cad_search(driver, short)
+
+            if owner:
+                rec["owner"] = owner.title()
+                if appraised:
+                    rec["appraised_value"] = appraised
                 enriched += 1
-            if address and len(address) > 5:
-                rec["address"] = address
-            if (i+1) % 20 == 0:
-                log.info(f"  {i+1}/{len(needs)} | {enriched} named")
-            time.sleep(0.3)
+
+            if (i+1) % 10 == 0:
+                log.info(f"  CAD: {i+1}/{len(needs)} | {enriched} named")
+            time.sleep(0.5)
 
     except Exception as e:
-        log.error(f"Enrichment error: {e}")
+        log.error(f"CAD enrichment error: {e}")
     finally:
         if driver:
             try: driver.quit()
             except Exception: pass
 
-    log.info(f"Enrichment: {enriched}/{len(needs)} named")
+    log.info(f"CAD enrichment: {enriched}/{len(needs)} named")
     return enriched
 
 def load_known_docs():
@@ -306,7 +317,7 @@ def write_records(records):
 
 def main():
     log.info("=" * 60)
-    log.info("Nueces County Lead Scraper v2.1")
+    log.info("Nueces County Lead Scraper v2.2")
     log.info(f"Cutoff: {CUTOFF} (21 days) | Today: {TODAY}")
     log.info("=" * 60)
 
@@ -324,7 +335,7 @@ def main():
     records = list(seen.values())
     log.info(f"After merge: {len(records)} total | {len(doc_id_map)} IDs mapped")
 
-    enrich_records(records, doc_id_map)
+    enrich_from_cad(records)
 
     for r in records:
         s = 5
