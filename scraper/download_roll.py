@@ -171,68 +171,54 @@ def process_appraisal_roll(zip_path, tmpdir):
 
 def build_lookup_from_gis(records, fields):
     """Build lookup dict from GIS DBF records."""
-    # Try to identify key field names (vary by shapefile version)
     field_map = {}
     field_lower = {f.lower(): f for f in fields}
 
-    # Owner name field
-    for candidate in ["owner", "owner1", "ownername", "owner_name", "own_name"]:
+    # Owner name — Nueces shapefile uses file_as_na or last_appra
+    for candidate in ["file_as_na", "last_appra", "owner", "owner1", "ownername", "owner_name"]:
         if candidate in field_lower:
             field_map["owner"] = field_lower[candidate]
             break
 
-    # Situs (property) address
-    for candidate in ["situs", "situsaddr", "situs_addr", "prop_addr", "address",
-                      "site_addr", "str_addr"]:
+    # Situs (property) address — Nueces uses situs_disp
+    for candidate in ["situs_disp", "situs", "situsaddr", "situs_addr", "prop_addr", "address"]:
         if candidate in field_lower:
             field_map["situs"] = field_lower[candidate]
             break
 
-    # Situs street number
-    for candidate in ["situsnum", "situs_num", "str_num", "addr_num", "hse_num"]:
-        if candidate in field_lower:
-            field_map["situs_num"] = field_lower[candidate]
-            break
-
-    # Situs street name
-    for candidate in ["situsstr", "situs_str", "str_name", "addr_str", "str_dir"]:
-        if candidate in field_lower:
-            field_map["situs_str"] = field_lower[candidate]
-            break
-
-    # City
-    for candidate in ["city", "situs_city", "prop_city", "situscity"]:
+    # City — Nueces uses addr_city
+    for candidate in ["addr_city", "city", "situs_city", "prop_city", "situscity"]:
         if candidate in field_lower:
             field_map["city"] = field_lower[candidate]
             break
 
-    # ZIP
-    for candidate in ["zip", "zipcode", "zip_code", "situszip", "situs_zip"]:
+    # ZIP — Nueces uses addr_zip
+    for candidate in ["addr_zip", "zip", "zipcode", "zip_code", "situszip", "situs_zip"]:
         if candidate in field_lower:
             field_map["zip"] = field_lower[candidate]
             break
 
-    # Appraised value
-    for candidate in ["tot_val", "totval", "appraised", "mkt_val", "total_val",
-                      "land_val", "impr_val", "tot_appr"]:
+    # Appraised value — Nueces uses appraised_ or prop_val_y
+    for candidate in ["appraised_", "prop_val_y", "last_appra", "assessed_v",
+                      "tot_val", "totval", "appraised", "mkt_val", "total_val"]:
         if candidate in field_lower:
             field_map["value"] = field_lower[candidate]
             break
 
     # Legal description
-    for candidate in ["legal", "legal_desc", "legal_des", "legaldesc", "descript"]:
+    for candidate in ["legal_desc", "legal", "legal_des", "legaldesc", "descript"]:
         if candidate in field_lower:
             field_map["legal"] = field_lower[candidate]
             break
 
     # Property type
-    for candidate in ["prop_type", "state_cd", "class_cd", "use_code", "prop_cd"]:
+    for candidate in ["state_cd", "prop_type", "class_cd", "use_code", "prop_cd"]:
         if candidate in field_lower:
             field_map["prop_type"] = field_lower[candidate]
             break
 
-    # Mail address (for absentee detection)
-    for candidate in ["mail_addr", "mailaddr", "mail_str", "mailing"]:
+    # Mail address — Nueces uses addr_line2 + addr_city
+    for candidate in ["addr_line2", "mail_addr", "mailaddr", "mail_str", "mailing"]:
         if candidate in field_lower:
             field_map["mail"] = field_lower[candidate]
             break
