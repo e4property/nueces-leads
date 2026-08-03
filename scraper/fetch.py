@@ -48,7 +48,7 @@ COUNTY            = "nueces"
 PUBLICSEARCH_BASE = "https://nueces.tx.publicsearch.us"
 RECORDS_PATH      = Path("dashboard/records.json")
 LOOKUP_PATH       = Path("scraper/nueces_lookup.csv.gz")
-SCRAPE_DAYS       = 90        # rolling window
+SCRAPE_DAYS       = 365   # extended for initial Nueces catchup        # rolling window
 AGED_DAYS         = 60        # leads older than this = aged
 TODAY             = datetime.now(timezone.utc)
 TODAY_NAIVE       = datetime.now()
@@ -415,7 +415,7 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
         page_recs = []
 
         for row in rows:
-            if re.search(r"<th|thead|DOC.TYPE|RECORDED|GRANTOR|GRANTEE", row, re.IGNORECASE):
+            if re.search(r"<th|thead|DOC.TYPE|RECORDED|GRANTOR|GRANTEE|PROPERTY", row, re.IGNORECASE):
                 continue
 
             cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.DOTALL)
@@ -423,9 +423,29 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
             if len(cells) < 3:
                 continue
 
-            doc_num = next((c for c in cells if re.match(r"^\d{9,12}$", c.strip())), "")
+            doc_num = next((c for c in cells if re.match(r"^\d{7,10}$", c.strip())), "")
             if not doc_num or doc_num in known_docs:
                 continue
+
+            # Nueces FC results include PROPERTY ADDRESS column
+            # Format: DOC TYPE | RECORDED | SALE DATE | DOC# | PROPERTY ADDRESS | GRANTOR | GRANTEE
+            property_addr = ""
+            addr_candidates = [
+                c for c in cells
+                if re.match(r"^\d+\s+[A-Z]", c.upper())
+                and len(c) > 8
+                and "N/A" not in c.upper()
+                and not re.match(r"^\d{7,10}$", c)
+            ]
+            if addr_candidates:
+                raw_addr = addr_candidates[0]
+                # May contain subdivision name like "LAMAR PARK SECTION 1 LOT 2"
+                # Try to extract just the street address if it has a number prefix
+                addr_m = re.match(r"^(\d+\s+[A-Z0-9 ]+?)(?:\s+(?:LOT|BLOCK|SECTION|UNIT|APT|#).*)?$", raw_addr.upper())
+                if addr_m:
+                    property_addr = addr_m.group(1).strip()
+                else:
+                    property_addr = raw_addr.upper()[:80]
 
             ps_doc_id = ""
             href = re.findall(r"/doc/(\d+)", row)
@@ -497,6 +517,10 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
             rec["sale_date"]   = sale_date
             rec["legal_desc"]  = legal.upper() if legal else ""
             rec["remarks"]     = remarks_raw[:200] if remarks_raw else ""
+            # Direct address from PublicSearch results table
+            if property_addr:
+                rec["address"] = property_addr
+                rec["city"]    = "Corpus Christi"
 
             page_recs.append(rec)
 
@@ -705,10 +729,11 @@ def main():
     all_new = []
 
     try:
-        # Source 1: FC department — NOF (Notice of Foreclosure)
+        # Source 1: FC department — ALL foreclosure notices (blank search = all docs)
+        # Nueces uses "FORECLOSURE NOTICE" doc type — blank search catches everything
         nof_recs = scrape_publicsearch(
             department="FC",
-            search_term="NOTICE",
+            search_term="",
             lead_type="NOF",
             known_docs=known_docs,
             driver=driver,
@@ -716,7 +741,7 @@ def main():
         )
         all_new.extend(nof_recs)
 
-        # Source 2: FC department — TAX foreclosures
+        # Source 2: FC department — TAX foreclosures (separate search)
         tax_recs = scrape_publicsearch(
             department="FC",
             search_term="TAX",
@@ -748,10 +773,12 @@ def main():
     ce_recs = scrape_code_enforcement(known_docs, run_ts)
     all_new.extend(ce_recs)
 
-    # ── Enrich new records ────────────────────────────────────────────────────
-    log.info(f"Enriching {len(all_new)} new records from appraisal roll...")
+    # ── Enrich ALL records missing address — new + existing ──────────────────
+    needs_enrich = [r for r in existing if not r.get("address") or not r.get("appraised_value")]
+    enrich_targets = all_new + needs_enrich
+    log.info(f"Enriching {len(all_new)} new + {len(needs_enrich)} existing records from appraisal roll...")
     enriched = 0
-    for rec in all_new:
+    for rec in enrich_targets:
         before_addr = rec.get("address", "")
         rec = enrich_from_lookup(rec, lookup)
         # Score
