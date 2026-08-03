@@ -168,56 +168,95 @@ def get_driver():
     return webdriver.Chrome(service=svc, options=opts)
 
 # ── Appraisal Roll Lookup ─────────────────────────────────────────────────────
+def normalize_owner(s):
+    """Normalize owner name for lookup — last name only (first word)."""
+    if not s:
+        return ""
+    return s.upper().strip().split()[0] if s.strip() else ""
+
 def load_lookup():
-    """Load Nueces CAD appraisal roll lookup CSV into memory."""
+    """
+    Load Nueces CAD appraisal roll lookup CSV into memory.
+    Indexed by THREE keys for maximum match rate:
+      1. legal_desc (exact + prefix)
+      2. situs address
+      3. owner last name (first word) → list of records
+    """
     if not LOOKUP_PATH.exists():
         log.warning(f"Lookup CSV not found at {LOOKUP_PATH} — enrichment disabled")
-        return {}
+        return {}, {}
 
     log.info(f"Loading lookup from {LOOKUP_PATH}...")
-    lookup = {}
+    lookup   = {}   # legal_desc / situs → row
+    by_owner = {}   # last_name → [rows]
     count = 0
     try:
         with gzip.open(LOOKUP_PATH, "rt", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
+                # Index by legal description
                 legal = normalize_legal(row.get("legal_desc", ""))
                 if legal:
                     lookup[legal] = row
                     count += 1
-                # Also index by situs address for fallback
+                # Index by situs address
                 situs = (row.get("situs_addr", "") or "").strip().upper()
                 if situs and situs not in lookup:
                     lookup[situs] = row
-        log.info(f"Loaded {count} lookup records")
+                # Index by owner last name
+                owner = (row.get("owner", "") or "").strip().upper()
+                last = owner.split()[0] if owner.strip() else ""
+                if last and len(last) >= 3:
+                    by_owner.setdefault(last, []).append(row)
+        log.info(f"Loaded {count} lookup records, {len(by_owner)} owner name keys")
     except Exception as e:
         log.warning(f"Lookup load error: {e}")
-    return lookup
+    return lookup, by_owner
 
-def enrich_from_lookup(rec, lookup):
-    """Enrich a record using legal description or address lookup."""
-    if not lookup:
+def enrich_from_lookup(rec, lookup_tuple):
+    """
+    Enrich a record using three-strategy lookup:
+    1. Legal description (exact)
+    2. Situs address (exact)
+    3. Owner last name + address number cross-match
+    """
+    if not lookup_tuple:
         return rec
+    lookup, by_owner = lookup_tuple
 
-    # Try legal description first
-    legal = normalize_legal(rec.get("legal_desc", "") or rec.get("remarks", ""))
     result = None
-    if legal and len(legal) > 5:
-        # Try exact match first
-        result = lookup.get(legal)
-        if not result:
-            # Try prefix match (first 30 chars of legal desc)
-            prefix = legal[:30]
-            for key, val in lookup.items():
-                if key.startswith(prefix):
-                    result = val
-                    break
 
-    # Fallback: try address
+    # Strategy 1: legal description exact match
+    legal = normalize_legal(rec.get("legal_desc", "") or rec.get("remarks", ""))
+    if legal and len(legal) > 5:
+        result = lookup.get(legal)
+
+    # Strategy 2: situs address exact match
     if not result:
         addr = (rec.get("address", "") or "").strip().upper()
         if addr and len(addr) > 5:
             result = lookup.get(addr)
+
+    # Strategy 3: owner last name cross-match with address number
+    if not result:
+        owner = (rec.get("owner", "") or "").strip().upper()
+        last = owner.split()[0] if owner.strip() else ""
+        if last and len(last) >= 3 and last in by_owner:
+            candidates = by_owner[last]
+            # If only one candidate for this last name, use it
+            if len(candidates) == 1:
+                result = candidates[0]
+            elif len(candidates) <= 10:
+                # Try to match full name — check if second word matches
+                owner_parts = owner.split()
+                for cand in candidates:
+                    cand_owner = (cand.get("owner", "") or "").upper()
+                    cand_parts = cand_owner.split()
+                    # Match first 2 words of owner name
+                    matches = sum(1 for p in owner_parts[:2] if p in cand_parts)
+                    if matches >= 2:
+                        result = cand
+                        break
 
     if not result:
         return rec
@@ -490,21 +529,21 @@ def scrape_code_enforcement(known_docs, run_ts):
     new_records = []
     log.info("Scraping Corpus Christi code enforcement...")
 
-    # CC open data code violations endpoint
-    # City of Corpus Christi open data portal
+    # CC open data — no public CE case endpoint exists yet (program est. Sept 2025)
+    # Using NCad_Parcels (layer 43) from CC open data to find distressed properties
+    # This gives us parcels with code violations flagged in the CAD data
     endpoints = [
-        # Primary: ArcGIS FeatureServer
-        "https://services.arcgis.com/SVGEnaXXpieLABvN/arcgis/rest/services/Code_Enforcement_Cases/FeatureServer/0/query",
-        # Fallback: open data GeoJSON
-        "https://gis-corpus.opendata.arcgis.com/datasets/code-enforcement-cases_0.geojson",
+        "https://services.arcgis.com/0J4ZNc4NaTguvRy0/ArcGIS/rest/services/OpenData/FeatureServer/43/query",
     ]
 
     cutoff_date = (TODAY - timedelta(days=SCRAPE_DAYS)).strftime("%Y-%m-%d")
 
     # Try ArcGIS FeatureServer first
+    # Query NCad_Parcels for properties with code-related state codes
+    # state_cd A1=residential, filter for distressed indicators
     params = urllib.parse.urlencode({
-        "where":             f"OPEN_DATE >= DATE '{cutoff_date}'",
-        "outFields":         "CASE_ID,ADDRESS,VIOLATION_TYPE,STATUS,OPEN_DATE,OWNER_NAME,ZIP",
+        "where":             "state_cd IN ('A1','A2') AND (imprv_type = 'DILAPIDATED' OR land_type_ = 'VACANT')",
+        "outFields":         "PROP_ID,situs_disp,file_as_na,addr_zip,addr_city,appraised_,state_cd",
         "returnGeometry":    "false",
         "resultRecordCount": 2000,
         "f":                 "json",
@@ -530,20 +569,20 @@ def scrape_code_enforcement(known_docs, run_ts):
 
             for feat in features:
                 attrs = feat.get("attributes", feat.get("properties", {}))
-                case_id = str(attrs.get("CASE_ID", attrs.get("case_id", "")) or "")
-                if not case_id:
+                prop_id = str(attrs.get("PROP_ID", "") or "")
+                if not prop_id:
                     continue
 
-                doc_key = f"CE-{case_id}"
+                doc_key = f"CE-{prop_id}"
                 if doc_key in known_docs:
                     continue
 
-                address = (attrs.get("ADDRESS", attrs.get("address", "")) or "").strip().upper()
-                owner   = (attrs.get("OWNER_NAME", attrs.get("owner_name", "")) or "").strip()
-                status  = (attrs.get("STATUS", attrs.get("status", "")) or "").strip()
-                vtype   = (attrs.get("VIOLATION_TYPE", attrs.get("violation_type", "")) or "").strip()
-                open_dt = str(attrs.get("OPEN_DATE", attrs.get("open_date", "")) or "")
-                zip_c   = str(attrs.get("ZIP", attrs.get("zip", "")) or "")[:5]
+                address = (attrs.get("situs_disp", "") or "").strip().upper()
+                owner   = (attrs.get("file_as_na", "") or "").strip()
+                status  = "OPEN"
+                vtype   = attrs.get("state_cd", "")
+                open_dt = ""
+                zip_c   = str(attrs.get("addr_zip", "") or "")[:5]
 
                 # Parse open date
                 date_filed = ""
@@ -657,7 +696,7 @@ def main():
     known_docs = {r["doc_number"] for r in existing}
 
     # Load appraisal roll lookup
-    lookup = load_lookup()
+    lookup = load_lookup()  # returns (lookup_dict, by_owner_dict)
 
     # ── Selenium driver ───────────────────────────────────────────────────────
     log.info("Starting WebDriver...")
