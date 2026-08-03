@@ -1,5 +1,5 @@
 """
-Nueces County Motivated Seller Lead Scraper v1.0
+Nueces County Motivated Seller Lead Scraper v1.1
 County: Nueces (Corpus Christi, TX)
 Source 1: nueces.tx.publicsearch.us — FC dept (NOF/TAX foreclosures)
 Source 2: nueces.tx.publicsearch.us — RP dept (Appointment of Substitute Trustee / Pre-Fore)
@@ -7,6 +7,23 @@ Source 3: Corpus Christi Code Compliance cases (open violations)
 Enrichment: Nueces CAD appraisal roll lookup CSV (legal desc → address/owner/value)
 GHL tags: nueces_lead, nueces_prefore, nueces_ce
 Scrape schedule: Mon/Thu 9am + 3pm CST (14:00 + 20:00 UTC)
+
+v1.1 changes (address fix):
+  - FC/NOF/TAX leads were getting 0/N addresses because PROPERTY ADDRESS
+    column contains a legal description ("LAMAR PARK SECTION 1 LOT 2"),
+    not a street address. Direct-address regex correctly skipped these
+    (working as intended) — but roll enrichment was ALSO failing because
+    it required an exact string match against nueces_lookup.csv.gz, and
+    county rolls abbreviate differently than PublicSearch (SEC vs SECTION,
+    BLK vs BLOCK, etc).
+  - NEW: parse_legal_components() extracts (subdivision name signature,
+    lot, block, section) independent of abbreviation/word order, and
+    load_lookup()/enrich_from_lookup() match on that signature.
+  - NEW: fetch_doc_address() Selenium fallback — for any FC lead still
+    missing an address after roll match, opens the doc's PublicSearch
+    page and pulls the address straight out of the document header.
+    Capped at MAX_DOC_FETCH per run.
+  - FIXED: NameError in scrape_code_enforcement (undefined `case_id` var).
 
 v1.0 changes:
   - Fresh build, no dependency on Bexar scraper
@@ -53,6 +70,9 @@ AGED_DAYS         = 60        # leads older than this = aged
 TODAY             = datetime.now(timezone.utc)
 TODAY_NAIVE       = datetime.now()
 
+# Cap on Selenium doc-page fetches per run (address fallback) — keeps runtime bounded
+MAX_DOC_FETCH     = 60
+
 # Coastal Corpus Christi ZIP codes — premium distress signal
 COASTAL_ZIPS = {
     "78401","78402","78403","78404","78405","78406","78407","78408",
@@ -86,6 +106,55 @@ def normalize_legal(s):
     if not s:
         return ""
     return re.sub(r"\s+", " ", s.upper().strip())
+
+# ── Legal description signature matching (v1.1) ───────────────────────────────
+LOT_RE       = re.compile(r"\bLOT[S]?\.?\s*([0-9A-Z\-]+)")
+BLOCK_NUM_RE = re.compile(r"\bBL(?:OC)?K\.?\s*([0-9A-Z\-]+)")
+SECTION_RE   = re.compile(r"\bSEC(?:TION)?\.?\s*([0-9A-Z\-]+)")
+
+LEGAL_NOISE_WORDS = {
+    "SUBDIVISION","SUBD","ADDITION","ADDN","ADD","UNIT","PHASE","PH",
+    "REPLAT","AMENDED","AMD","PLAT","OF","THE","AN","A","AND","INST",
+    "NO","NUMBER","RECORDED","VOL","VOLUME","PG","PAGE"
+}
+
+def parse_legal_components(s):
+    """
+    Extract (subdivision_name_signature, lot, block, section) from a legal
+    description, independent of abbreviation style (SEC vs SECTION, BLK vs
+    BLOCK), punctuation, or word order. Used to match PublicSearch's legal
+    description text against the county roll's legal_desc field, which are
+    almost never formatted identically even for the same parcel.
+    """
+    s = (s or "").upper()
+    s = re.sub(r"[^\w\s]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+
+    lot = None
+    m = LOT_RE.search(s)
+    if m:
+        lot = m.group(1).strip("-")
+
+    block = None
+    m = BLOCK_NUM_RE.search(s)
+    if m:
+        block = m.group(1).strip("-")
+
+    section = None
+    m = SECTION_RE.search(s)
+    if m:
+        section = m.group(1).strip("-")
+
+    # Strip the LOT/BLOCK/SECTION phrases out, whatever's left is the
+    # subdivision name — turn it into an order-independent token set.
+    name_part = s
+    name_part = LOT_RE.sub(" ", name_part)
+    name_part = BLOCK_NUM_RE.sub(" ", name_part)
+    name_part = SECTION_RE.sub(" ", name_part)
+    tokens = [t for t in name_part.split() if len(t) >= 3 and t not in LEGAL_NOISE_WORDS]
+    name_sig = frozenset(tokens)
+
+    return name_sig, lot, block, section
 
 def parse_sale_date(raw):
     if not raw:
@@ -167,6 +236,50 @@ def get_driver():
     svc = Service(ChromeDriverManager().install())
     return webdriver.Chrome(service=svc, options=opts)
 
+# ── Doc-page address fallback (v1.1) ──────────────────────────────────────────
+# Matches a header line like "2522 WIDGEON DR CORPUS CHRISTI TX 78410"
+DOC_ADDR_LABEL_RE = re.compile(r"Property\s*Address[:\s]*([0-9][^<\n]{5,90})", re.IGNORECASE)
+DOC_ADDR_GENERIC_RE = re.compile(
+    r"(\d{1,6}\s+[A-Z0-9.\-\/ ]{3,40}?)\s+([A-Z][A-Z .]{2,25}?)\s+TX\s+(\d{5})"
+)
+
+def fetch_doc_address(driver, ps_doc_id, timeout=20):
+    """
+    Fallback for FC leads that don't get a roll match: open the individual
+    doc's PublicSearch page and pull the street address straight out of the
+    document header. Returns (street, city, zip) or (None, None, None).
+    """
+    if not ps_doc_id:
+        return None, None, None
+    url = f"{PUBLICSEARCH_BASE}/doc/{ps_doc_id}"
+    try:
+        driver.get(url)
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
+        time.sleep(1.5)
+
+        text_plain = re.sub(r"<[^>]+>", " ", driver.page_source)
+        text_plain = re.sub(r"\s+", " ", text_plain)
+
+        # Prefer a labeled "Property Address" block if the page has one
+        m = DOC_ADDR_LABEL_RE.search(text_plain)
+        if m:
+            m2 = DOC_ADDR_GENERIC_RE.search(m.group(1) + " TX 00000")
+            if m2:
+                return m2.group(1).strip(), m2.group(2).strip(), m2.group(3).strip()
+
+        # Otherwise scan the whole page for a street/city/TX/zip pattern
+        for m in DOC_ADDR_GENERIC_RE.finditer(text_plain):
+            street, city, zipc = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+            if zipc.startswith("78"):  # sanity check — South Texas zip
+                return street, city, zipc
+
+    except Exception as e:
+        log.warning(f"  doc address fetch failed for {ps_doc_id}: {e}")
+
+    return None, None, None
+
 # ── Appraisal Roll Lookup ─────────────────────────────────────────────────────
 def normalize_owner(s):
     """Normalize owner name for lookup — last name only (first word)."""
@@ -177,82 +290,122 @@ def normalize_owner(s):
 def load_lookup():
     """
     Load Nueces CAD appraisal roll lookup CSV into memory.
-    Indexed by THREE keys for maximum match rate:
-      1. legal_desc (exact + prefix)
-      2. situs address
-      3. owner last name (first word) → list of records
+    Indexed by FOUR keys for maximum match rate:
+      1. legal_desc — exact normalized string (fast path, rarely hits)
+      2. legal_desc — (subdivision-name signature, lot) — the real fix
+      3. legal_desc — subdivision-name signature alone (fallback)
+      4. situs address / owner last name (unchanged from v1.0)
     """
     if not LOOKUP_PATH.exists():
         log.warning(f"Lookup CSV not found at {LOOKUP_PATH} — enrichment disabled")
-        return {}, {}
+        return {}, {}, {}, {}
 
     log.info(f"Loading lookup from {LOOKUP_PATH}...")
-    lookup   = {}   # legal_desc / situs → row
-    by_owner = {}   # last_name → [rows]
+    lookup      = {}   # exact normalized legal_desc / situs → row
+    by_sig_lot  = {}   # (name_sig, lot) → [rows]
+    by_sig      = {}   # name_sig → [rows]
+    by_owner    = {}   # last_name → [rows]
     count = 0
     try:
         with gzip.open(LOOKUP_PATH, "rt", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                # Index by legal description
-                legal = normalize_legal(row.get("legal_desc", ""))
+                raw_legal = row.get("legal_desc", "")
+
+                # 1. exact normalized string
+                legal = normalize_legal(raw_legal)
                 if legal:
                     lookup[legal] = row
                     count += 1
-                # Index by situs address
+
+                # 2 & 3. signature-based index
+                name_sig, lot, block, section = parse_legal_components(raw_legal)
+                if name_sig:
+                    if lot:
+                        by_sig_lot.setdefault((name_sig, lot), []).append(row)
+                    by_sig.setdefault(name_sig, []).append(row)
+
+                # 4. situs address
                 situs = (row.get("situs_addr", "") or "").strip().upper()
                 if situs and situs not in lookup:
                     lookup[situs] = row
-                # Index by owner last name
+
+                # 4. owner last name
                 owner = (row.get("owner", "") or "").strip().upper()
                 last = owner.split()[0] if owner.strip() else ""
                 if last and len(last) >= 3:
                     by_owner.setdefault(last, []).append(row)
-        log.info(f"Loaded {count} lookup records, {len(by_owner)} owner name keys")
+        log.info(
+            f"Loaded {count} lookup records, {len(by_sig_lot)} sig+lot keys, "
+            f"{len(by_sig)} sig-only keys, {len(by_owner)} owner name keys"
+        )
     except Exception as e:
         log.warning(f"Lookup load error: {e}")
-    return lookup, by_owner
+    return lookup, by_sig_lot, by_sig, by_owner
+
+def _resolve_sig_candidates(candidates, block):
+    """Pick the best row out of multiple signature-match candidates."""
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+    if block:
+        for cand in candidates:
+            _, _, cand_block, _ = parse_legal_components(cand.get("legal_desc", ""))
+            if cand_block and cand_block == block:
+                return cand
+    # No confident tie-break — take the first as a best-effort guess
+    return candidates[0]
 
 def enrich_from_lookup(rec, lookup_tuple):
     """
-    Enrich a record using three-strategy lookup:
-    1. Legal description (exact)
-    2. Situs address (exact)
-    3. Owner last name + address number cross-match
+    Enrich a record using the roll lookup. Tries, in order:
+    1. Legal description — exact normalized string match
+    2. Legal description — signature match (subdivision name + lot number)
+    3. Legal description — signature match (subdivision name only)
+    4. Situs address exact match
+    5. Owner last name cross-match
     """
     if not lookup_tuple:
         return rec
-    lookup, by_owner = lookup_tuple
+    lookup, by_sig_lot, by_sig, by_owner = lookup_tuple
 
     result = None
+    raw_legal = rec.get("legal_desc", "") or rec.get("remarks", "")
 
-    # Strategy 1: legal description exact match
-    legal = normalize_legal(rec.get("legal_desc", "") or rec.get("remarks", ""))
+    # Strategy 1: exact legal description string match
+    legal = normalize_legal(raw_legal)
     if legal and len(legal) > 5:
         result = lookup.get(legal)
 
-    # Strategy 2: situs address exact match
+    # Strategy 2/3: signature match (this is what actually fixes FC leads)
+    if not result:
+        name_sig, lot, block, section = parse_legal_components(raw_legal)
+        if name_sig:
+            candidates = by_sig_lot.get((name_sig, lot), []) if lot else []
+            if not candidates:
+                candidates = by_sig.get(name_sig, [])
+            result = _resolve_sig_candidates(candidates, block)
+
+    # Strategy 4: situs address exact match
     if not result:
         addr = (rec.get("address", "") or "").strip().upper()
         if addr and len(addr) > 5:
             result = lookup.get(addr)
 
-    # Strategy 3: owner last name cross-match with address number
+    # Strategy 5: owner last name cross-match with address number
     if not result:
         owner = (rec.get("owner", "") or "").strip().upper()
         last = owner.split()[0] if owner.strip() else ""
         if last and len(last) >= 3 and last in by_owner:
             candidates = by_owner[last]
-            # If only one candidate for this last name, use it
             if len(candidates) == 1:
                 result = candidates[0]
             elif len(candidates) <= 10:
-                # Try to match full name — check if second word matches
                 owner_parts = owner.split()
                 for cand in candidates:
                     cand_owner = (cand.get("owner", "") or "").upper()
                     cand_parts = cand_owner.split()
-                    # Match first 2 words of owner name
                     matches = sum(1 for p in owner_parts[:2] if p in cand_parts)
                     if matches >= 2:
                         result = cand
@@ -341,6 +494,7 @@ def new_record(doc_number, lead_type, source="publicsearch", run_ts=None):
         "tenure_score_bonus": 0,
         "deed_date":        "",
         "prop_id":          "",
+        "ps_doc_id":        "",
         # Code enforcement fields
         "ce_case_id":       "",
         "ce_reason":        "",
@@ -620,7 +774,7 @@ def scrape_code_enforcement(known_docs, run_ts):
                     pass
 
                 rec = new_record(doc_key, "CE", source="code_enforcement", run_ts=run_ts)
-                rec["ce_case_id"]  = case_id
+                rec["ce_case_id"]  = prop_id  # was: undefined `case_id` — fixed v1.1
                 rec["address"]     = address
                 rec["owner"]       = owner.title() if owner else ""
                 rec["zip"]         = zip_c
@@ -699,7 +853,7 @@ def dedup(existing, new_recs):
 def main():
     run_ts = TODAY.isoformat()
     log.info("=" * 60)
-    log.info(f"Nueces County Lead Scraper v1.0")
+    log.info(f"Nueces County Lead Scraper v1.1")
     log.info(f"Run: {run_ts}")
     log.info("=" * 60)
 
@@ -720,7 +874,7 @@ def main():
     known_docs = {r["doc_number"] for r in existing}
 
     # Load appraisal roll lookup
-    lookup = load_lookup()  # returns (lookup_dict, by_owner_dict)
+    lookup = load_lookup()  # returns (lookup, by_sig_lot, by_sig, by_owner)
 
     # ── Selenium driver ───────────────────────────────────────────────────────
     log.info("Starting WebDriver...")
@@ -763,6 +917,59 @@ def main():
         )
         all_new.extend(appt_recs)
 
+        # ── Enrich ALL records missing address — new + existing ──────────────
+        # (runs here, while the driver is still open, so the Selenium fallback
+        #  right after it can reuse the same session)
+        needs_enrich = [r for r in existing if not r.get("address") or not r.get("appraised_value")]
+        enrich_targets = all_new + needs_enrich
+        log.info(f"Enriching {len(all_new)} new + {len(needs_enrich)} existing records from appraisal roll...")
+        enriched = 0
+        for rec in enrich_targets:
+            before_addr = rec.get("address", "")
+            rec = enrich_from_lookup(rec, lookup)
+            rec["score"] = score_record(rec)
+            d = days_until_sale(rec.get("sale_date", ""))
+            rec["days_until_sale"] = d
+            if d is not None and d <= 14:
+                rec["flags"] = list(set(rec.get("flags", []) + ["URGENT", "AUCTION SOON"]))
+            elif d is not None and d <= 30:
+                rec["flags"] = list(set(rec.get("flags", []) + ["AUCTION SOON"]))
+            if rec.get("type") == "APPT":
+                rec["ghl_tag"] = "nueces_prefore"
+            elif rec.get("source") == "code_enforcement":
+                rec["ghl_tag"] = "nueces_ce"
+            else:
+                rec["ghl_tag"] = "nueces_lead"
+            if rec.get("address") and not before_addr:
+                enriched += 1
+        log.info(f"Roll enrichment: {enriched}/{len(all_new)} new-lead addresses filled")
+
+        # ── Selenium fallback: FC leads still missing address after roll match ──
+        still_missing = [
+            r for r in all_new
+            if r.get("type") in ("NOF", "TAX") and not r.get("address") and r.get("ps_doc_id")
+        ]
+        log.info(f"Selenium fallback: {len(still_missing)} FC leads still missing address")
+        fetched = 0
+        for rec in still_missing[:MAX_DOC_FETCH]:
+            street, city, zipc = fetch_doc_address(driver, rec["ps_doc_id"])
+            if street:
+                rec["address"] = street.upper()
+                if city:
+                    rec["city"] = city
+                if zipc:
+                    rec["zip"] = zipc
+                rec["is_coastal"] = is_coastal(rec.get("zip", ""))
+                rec["score"] = score_record(rec)
+                fetched += 1
+            time.sleep(1)
+        skipped = max(0, len(still_missing) - MAX_DOC_FETCH)
+        log.info(
+            f"Selenium fallback: {fetched}/{min(len(still_missing), MAX_DOC_FETCH)} "
+            f"addresses recovered from doc pages"
+            + (f" ({skipped} deferred to next run — MAX_DOC_FETCH cap)" if skipped else "")
+        )
+
     finally:
         try:
             driver.quit()
@@ -773,35 +980,11 @@ def main():
     ce_recs = scrape_code_enforcement(known_docs, run_ts)
     all_new.extend(ce_recs)
 
-    # ── Enrich ALL records missing address — new + existing ──────────────────
-    needs_enrich = [r for r in existing if not r.get("address") or not r.get("appraised_value")]
-    enrich_targets = all_new + needs_enrich
-    log.info(f"Enriching {len(all_new)} new + {len(needs_enrich)} existing records from appraisal roll...")
-    enriched = 0
-    for rec in enrich_targets:
-        before_addr = rec.get("address", "")
+    # Score/tag the code-enforcement batch too (it wasn't in enrich_targets above)
+    for rec in ce_recs:
         rec = enrich_from_lookup(rec, lookup)
-        # Score
         rec["score"] = score_record(rec)
-        # Auction urgency flags
-        d = days_until_sale(rec.get("sale_date", ""))
-        rec["days_until_sale"] = d
-        if d is not None and d <= 14:
-            rec["flags"] = list(set(rec.get("flags", []) + ["URGENT", "AUCTION SOON"]))
-        elif d is not None and d <= 30:
-            rec["flags"] = list(set(rec.get("flags", []) + ["AUCTION SOON"]))
-        # GHL tag
-        if rec.get("type") == "APPT":
-            rec["ghl_tag"] = "nueces_prefore"
-        elif rec.get("source") == "code_enforcement":
-            rec["ghl_tag"] = "nueces_ce"
-        else:
-            rec["ghl_tag"] = "nueces_lead"
-
-        if rec.get("address") and not before_addr:
-            enriched += 1
-
-    log.info(f"Enrichment: {enriched}/{len(all_new)} addresses filled from roll")
+        rec["ghl_tag"] = "nueces_ce"
 
     # ── Merge + dedup ─────────────────────────────────────────────────────────
     all_records = dedup(existing, all_new)
