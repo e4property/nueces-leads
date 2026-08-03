@@ -489,9 +489,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 <body>
 <!-- NAV -->
 <div class="nav">
-  <div class="nav-logo" onclick="toggleCountySwitcher()">NUECES<span>·</span>LEADS<sub>v1.0</sub> <span style="font-size:10px;color:var(--dim)">▾</span>
-    <div id="county-dropdown" style="display:none;position:absolute;top:42px;left:0;background:var(--surface);border:1px solid var(--border2);border-radius:var(--rl);min-width:220px;z-index:9999;box-shadow:var(--shadow-md);overflow:hidden"><div id="county-list"></div><div style="padding:8px 12px;border-top:1px solid var(--border)"><button onclick="openSettings();closeCountySwitcher()" style="font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;padding:0;font-family:'Inter',sans-serif">+ Manage counties</button></div></div>
-  </div>
+  <div class="nav-logo">NUECES<span>·</span>LEADS<sub>v1.0</sub></div>
   <div class="nav-tabs">
     <div class="ntab on" id="ntab-dash" onclick="showView('dash',this)">Dashboard</div>
     <div class="ntab" id="ntab-work" onclick="showView('work',this)">Work Leads <span class="tc" id="nav-unsearch">—</span></div>
@@ -809,7 +807,7 @@ let S={ghlApiKey:'',ghlLocationId:'UAOJlgeerLu3GChP9jDJ',recordsUrl:REC_URL_DEFA
 let allLeads=[],filteredLeads=[],selectedDoc=null,selectedIdx=-1;
 let currentView='all',currentSort='recent',searchQ='',currentNavView='dash';
 
-function init(){loadState();checkWeekReset();updateBudgetUI();updateResetInfo();initCountySwitcher();fetchLeads();setupKeys();}
+function init(){loadState();S.recordsUrl='https://e4property.github.io/nueces-leads/records.json';checkWeekReset();updateBudgetUI();updateResetInfo();fetchLeads();setupKeys();}
 function sundayTs(){const n=new Date(),d=new Date(n);d.setDate(n.getDate()-n.getDay());d.setHours(0,0,0,0);return d.getTime();}
 function loadState(){try{const s=localStorage.getItem(SK);if(s)S={...S,...JSON.parse(s)};}catch(e){}}
 function saveState(){localStorage.setItem(SK,JSON.stringify(S));}
