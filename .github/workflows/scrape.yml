@@ -1,33 +1,43 @@
-name: Scrape and Deploy
+name: Nueces Scrape and Deploy
+
 on:
   schedule:
-    - cron: '0 15 * * *'
-    - cron: '0 21 * * *'
+    - cron: '0 14 * * 1,4'   # Mon/Thu 9am CST (14:00 UTC)
+    - cron: '0 20 * * 1,4'   # Mon/Thu 3pm CST (20:00 UTC)
   workflow_dispatch:
+
 permissions:
   contents: write
   pages: write
   id-token: write
+
 jobs:
   scrape-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: "${{ secrets.GITHUB_TOKEN }}"
-      - uses: actions/setup-python@v4
+          token: ${{ secrets.GH_PAT }}
+
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install requests beautifulsoup4 lxml selenium webdriver-manager
-      - run: python scraper/fetch.py
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 lxml selenium webdriver-manager
+
+      - name: Run Nueces scraper
+        run: python scraper/fetch.py 2>&1 | tee /tmp/nueces.log
+        continue-on-error: false
+
       - name: Commit records
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add dashboard/records.json 2>/dev/null || true
           git diff --cached --quiet && echo "No changes" && exit 0
-          git commit -m "chore: update leads $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git commit -m "chore: update nueces leads $(date -u +'%Y-%m-%d %H:%M UTC')"
           for i in 1 2 3 4 5; do
             sleep $((RANDOM % 10 + 2))
             git fetch origin main
@@ -35,7 +45,9 @@ jobs:
             git push origin main && echo "Push succeeded" && break
             echo "Attempt $i failed, retrying..."
           done
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dashboard/
+
       - uses: actions/deploy-pages@v4
