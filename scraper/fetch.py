@@ -307,6 +307,7 @@ def fetch_address_by_click(driver, source_url, doc_number, timeout=20):
         WebDriverWait(driver, timeout).until(EC.url_contains("/doc/"))
         time.sleep(1.5)
 
+        landed_url = driver.current_url
         text_plain = re.sub(r"<[^>]+>", " ", driver.page_source)
         text_plain = re.sub(r"\s+", " ", text_plain)
 
@@ -322,6 +323,14 @@ def fetch_address_by_click(driver, source_url, doc_number, timeout=20):
             street, city, zipc = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
             if zipc.startswith("78"):  # sanity check — South Texas zip
                 return street, city, zipc
+
+        # Nothing matched — log exactly what we landed on so this is
+        # debuggable from the Action log instead of a silent 0/N.
+        snippet = text_plain[:400]
+        log.warning(
+            f"  click-fallback: doc {doc_number} landed on {landed_url} "
+            f"but no address pattern matched. Page text starts: {snippet!r}"
+        )
 
     except Exception as e:
         log.warning(f"  click-fallback failed for doc {doc_number}: {e}")
@@ -997,7 +1006,10 @@ def main():
         # ── Enrich ALL records missing address — new + existing ──────────────
         # (runs here, while the driver is still open, so the Selenium fallback
         #  right after it can reuse the same session)
-        needs_enrich = [r for r in existing if not r.get("address") or not r.get("appraised_value")]
+        needs_enrich = [
+            r for r in existing
+            if not r.get("address") or not r.get("appraised_value") or r.get("tenure_years") is None
+        ]
         enrich_targets = all_new + needs_enrich
         log.info(f"Enriching {len(all_new)} new + {len(needs_enrich)} existing records from appraisal roll...")
         enriched = 0
