@@ -223,6 +223,24 @@ def build_lookup_from_gis(records, fields):
             field_map["mail"] = field_lower[candidate]
             break
 
+    # Last sale date — gives us years-owned/tenure for free, no live API needed
+    for candidate in ["sl_dt", "sale_date", "deed_date", "last_sale_date"]:
+        if candidate in field_lower:
+            field_map["sale_date"] = field_lower[candidate]
+            break
+
+    # Last sale price — compared against current appraised value = equity signal
+    for candidate in ["sl_price", "sale_price", "last_sale_price"]:
+        if candidate in field_lower:
+            field_map["sale_price"] = field_lower[candidate]
+            break
+
+    # Year built — cheap to carry along, useful context on the dashboard
+    for candidate in ["yr_blt", "year_built", "yearbuilt"]:
+        if candidate in field_lower:
+            field_map["year_built"] = field_lower[candidate]
+            break
+
     log.info(f"Field mapping: {field_map}")
     log.info(f"All available fields: {fields}")
 
@@ -246,6 +264,9 @@ def build_lookup_from_gis(records, fields):
         legal = rec.get(field_map.get("legal", ""), "").strip()
         prop_type = rec.get(field_map.get("prop_type", ""), "").strip()
         mail = rec.get(field_map.get("mail", ""), "").strip()
+        sale_date = rec.get(field_map.get("sale_date", ""), "").strip()
+        sale_price = rec.get(field_map.get("sale_price", ""), "").strip()
+        year_built = rec.get(field_map.get("year_built", ""), "").strip()
 
         lookup.append({
             "legal_desc":      normalize_legal(legal),
@@ -257,6 +278,9 @@ def build_lookup_from_gis(records, fields):
             "prop_type":       prop_type,
             "absentee":        "1" if is_absentee(situs, mail) else "0",
             "is_entity":       "1" if is_entity(owner) else "0",
+            "sale_date":       sale_date,
+            "sale_price":      sale_price,
+            "year_built":      year_built,
         })
 
     log.info(f"Built {len(lookup)} lookup records")
@@ -266,7 +290,8 @@ def save_lookup(lookup, output_path):
     """Save lookup to gzipped CSV."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cols = ["legal_desc", "owner", "situs_addr", "situs_city",
-            "situs_zip", "appraised_value", "prop_type", "absentee", "is_entity"]
+            "situs_zip", "appraised_value", "prop_type", "absentee", "is_entity",
+            "sale_date", "sale_price", "year_built"]
     with gzip.open(output_path, "wt", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=cols)
         writer.writeheader()
