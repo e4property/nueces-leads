@@ -32,7 +32,7 @@ from fetch import (
     get_driver,
     scrape_publicsearch,
     enrich_from_lookup,
-    fetch_doc_address,
+    fetch_address_by_click,
     load_lookup,
     dedup,
     score_record,
@@ -107,11 +107,11 @@ def main():
         log.info(f"Roll enrichment: {filled}/{len(all_scraped)} addresses filled")
 
         # Selenium fallback for anything still missing an address
-        still_missing = [r for r in all_scraped if not r.get("address") and r.get("ps_doc_id")]
+        still_missing = [r for r in all_scraped if not r.get("address") and r.get("_source_url")]
         log.info(f"Selenium fallback: {len(still_missing)} still missing address")
         fetched = 0
         for rec in still_missing[:MAX_DOC_FETCH_BACKFILL]:
-            street, city, zipc = fetch_doc_address(driver, rec["ps_doc_id"])
+            street, city, zipc = fetch_address_by_click(driver, rec["_source_url"], rec["doc_number"])
             if street:
                 rec["address"] = street.upper()
                 if city:
@@ -142,6 +142,9 @@ def main():
     before_total = len(existing)
     merged = dedup(existing, all_scraped)
     log.info(f"Merge: {before_total} existing → {len(merged)} total after backfill")
+
+    for rec in merged:
+        rec.pop("_source_url", None)
 
     RECORDS_PATH.parent.mkdir(parents=True, exist_ok=True)
     RECORDS_PATH.write_text(json.dumps(merged, ensure_ascii=False), encoding="utf-8")
