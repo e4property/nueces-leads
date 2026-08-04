@@ -69,6 +69,11 @@ def main():
         except Exception as e:
             log.warning(f"Could not load records: {e}")
 
+    # Clear stale is_new flags before merging — matches fetch.py's main() behavior.
+    # Without this, leads flagged new by an earlier run keep showing as new forever.
+    for rec in existing:
+        rec["is_new"] = False
+
     lookup = load_lookup()
 
     log.info("Starting WebDriver...")
