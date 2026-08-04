@@ -704,7 +704,8 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
         offset += 50
         time.sleep(1.5)
 
-    log.info(f"{department}/{search_term}: {len(new_records)} new records")
+    with_id = sum(1 for r in new_records if r.get("ps_doc_id"))
+    log.info(f"{department}/{search_term}: {len(new_records)} new records ({with_id} with ps_doc_id)")
     return new_records
 
 # ── Code Enforcement Scraper ──────────────────────────────────────────────────
