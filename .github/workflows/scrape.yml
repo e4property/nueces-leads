@@ -28,7 +28,7 @@ jobs:
         run: pip install requests beautifulsoup4 lxml selenium webdriver-manager
 
       - name: Run Nueces scraper
-        run: python scraper/fetch.py 2>&1 | tee /tmp/nueces.log
+        run: python scraper/backfill_30d.py --days 30 2>&1 | tee /tmp/nueces.log
         continue-on-error: false
 
       - name: Commit records
