@@ -509,14 +509,17 @@ def new_record(doc_number, lead_type, source="publicsearch", run_ts=None):
         "ghl_id":           "",
     }
 
-def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, run_ts):
+def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, run_ts, days=None):
     """
     Generic PublicSearch scraper for Nueces County.
     department: 'FC' (foreclosures) or 'RP' (real property)
     search_term: e.g. 'NOTICE' or 'APPOINTMENT'
+    days: optional lookback window override (defaults to SCRAPE_DAYS).
+          Used by backfill_30d.py to re-pull a shorter recent window.
     """
     new_records = []
-    cutoff = (TODAY - timedelta(days=SCRAPE_DAYS)).strftime("%Y%m%d")
+    window = days if days is not None else SCRAPE_DAYS
+    cutoff = (TODAY - timedelta(days=window)).strftime("%Y%m%d")
     today_str = TODAY.strftime("%Y%m%d")
     offset = 0
     consecutive_empty = 0
@@ -618,6 +621,12 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
             sale_m = re.search(r"(\d{1,2}/\d{1,2}/\d{4})", remarks_raw)
             if sale_m:
                 sale_date = sale_m.group(1)
+            elif len(dates) >= 2:
+                # No keyword-flagged remarks cell — Nueces FC table may just list
+                # the trustee sale date as a plain second date column with no
+                # time/AUCTION text. Recorded date is dates[0], so take the next
+                # distinct date as the sale date fallback.
+                sale_date = next((d for d in dates[1:] if d != recorded_date), "")
 
             # Month/year from recorded date
             month, year = "", ""
