@@ -1,5 +1,5 @@
 """
-Nueces County Motivated Seller Lead Scraper v1.1
+Nueces County Motivated Seller Lead Scraper v1.2
 County: Nueces (Corpus Christi, TX)
 Source 1: nueces.tx.publicsearch.us — FC dept (NOF/TAX foreclosures)
 Source 2: nueces.tx.publicsearch.us — RP dept (Appointment of Substitute Trustee / Pre-Fore)
@@ -7,6 +7,24 @@ Source 3: Corpus Christi Code Compliance cases (open violations)
 Enrichment: Nueces CAD appraisal roll lookup CSV (legal desc → address/owner/value)
 GHL tags: nueces_lead, nueces_prefore, nueces_ce
 Scrape schedule: Mon/Thu 9am + 3pm CST (14:00 + 20:00 UTC)
+
+v1.2 changes (address fallback rewrite):
+  - Confirmed via DOM inspection (Aug 3 session): PublicSearch's FC results
+    table has NO href, NO data-id, NO static identifier anywhere in the row
+    HTML. It's a pure React SPA — the internal doc ID only exists in JS
+    state and appears in the URL after a client-side route change from a
+    row click. The old /doc/(\\d+) href-scraping fallback (v1.1) could
+    never have worked; it silently found nothing on every run.
+  - REPLACED fetch_doc_address() (broken href-based) with
+    fetch_address_by_click() — reloads the exact results page a row came
+    from (stored per-record as _source_url during scraping), locates that
+    row by its visible doc number, clicks it, waits for the /doc/ route
+    change, then pulls the address out of the doc page header. Works
+    regardless of how the site stores its internal IDs.
+  - ps_doc_id field kept for backward JSON compatibility but no longer
+    populated (the href it looked for doesn't exist) — _source_url is
+    the new mechanism, stripped from records before saving to keep
+    records.json clean.
 
 v1.1 changes (address fix):
   - FC/NOF/TAX leads were getting 0/N addresses because PROPERTY ADDRESS
@@ -19,10 +37,6 @@ v1.1 changes (address fix):
   - NEW: parse_legal_components() extracts (subdivision name signature,
     lot, block, section) independent of abbreviation/word order, and
     load_lookup()/enrich_from_lookup() match on that signature.
-  - NEW: fetch_doc_address() Selenium fallback — for any FC lead still
-    missing an address after roll match, opens the doc's PublicSearch
-    page and pulls the address straight out of the document header.
-    Capped at MAX_DOC_FETCH per run.
   - FIXED: NameError in scrape_code_enforcement (undefined `case_id` var).
 
 v1.0 changes:
@@ -191,6 +205,24 @@ def score_record(rec):
     s += rec.get("tenure_score_bonus", 0)
     return min(s, 10)
 
+def years_owned_from_sale_date(raw):
+    """
+    Parse a roll sale_date (sl_dt) into years-owned. CAD exports vary in
+    format (YYYYMMDD, MM/DD/YYYY, YYYY-MM-DD) so try the common ones.
+    Returns None if unparseable/blank.
+    """
+    if not raw:
+        return None
+    raw = raw.strip()
+    for fmt in ("%Y%m%d", "%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y"):
+        try:
+            dt = datetime.strptime(raw, fmt)
+            years = (TODAY_NAIVE - dt).days / 365.25
+            return round(years, 1) if years >= 0 else None
+        except ValueError:
+            continue
+    return None
+
 def tenure_bonus(yrs):
     if yrs is None: return 0
     if yrs >= 15:   return 15
@@ -236,27 +268,43 @@ def get_driver():
     svc = Service(ChromeDriverManager().install())
     return webdriver.Chrome(service=svc, options=opts)
 
-# ── Doc-page address fallback (v1.1) ──────────────────────────────────────────
+# ── Doc-page address fallback (v1.2 — click-through) ──────────────────────────
 # Matches a header line like "2522 WIDGEON DR CORPUS CHRISTI TX 78410"
 DOC_ADDR_LABEL_RE = re.compile(r"Property\s*Address[:\s]*([0-9][^<\n]{5,90})", re.IGNORECASE)
 DOC_ADDR_GENERIC_RE = re.compile(
     r"(\d{1,6}\s+[A-Z0-9.\-\/ ]{3,40}?)\s+([A-Z][A-Z .]{2,25}?)\s+TX\s+(\d{5})"
 )
 
-def fetch_doc_address(driver, ps_doc_id, timeout=20):
+def fetch_address_by_click(driver, source_url, doc_number, timeout=20):
     """
-    Fallback for FC leads that don't get a roll match: open the individual
-    doc's PublicSearch page and pull the street address straight out of the
-    document header. Returns (street, city, zip) or (None, None, None).
+    Fallback for FC leads that don't get a roll match. PublicSearch's results
+    table is a pure React SPA with NO href/data-id anywhere in the row HTML
+    (confirmed via DOM inspection) — the internal doc ID only exists in JS
+    state and shows up in the URL after a client-side route change from a
+    row click. So instead of scraping a link that doesn't exist, this reloads
+    the exact results page the row came from, finds that row by its visible
+    doc number, clicks it, waits for the route to land on /doc/<id>, then
+    pulls the address out of the doc page header.
+    Returns (street, city, zip) or (None, None, None).
     """
-    if not ps_doc_id:
+    if not source_url or not doc_number:
         return None, None, None
-    url = f"{PUBLICSEARCH_BASE}/doc/{ps_doc_id}"
     try:
-        driver.get(url)
+        driver.get(source_url)
         WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, "table tr td"))
         )
+        time.sleep(1)
+
+        row_xpath = f"//tr[.//span[normalize-space(text())='{doc_number}']]"
+        row = WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.XPATH, row_xpath))
+        )
+        clickable = row.find_element(By.CSS_SELECTOR, "td.col-3")
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", clickable)
+        clickable.click()
+
+        WebDriverWait(driver, timeout).until(EC.url_contains("/doc/"))
         time.sleep(1.5)
 
         text_plain = re.sub(r"<[^>]+>", " ", driver.page_source)
@@ -276,7 +324,7 @@ def fetch_doc_address(driver, ps_doc_id, timeout=20):
                 return street, city, zipc
 
     except Exception as e:
-        log.warning(f"  doc address fetch failed for {ps_doc_id}: {e}")
+        log.warning(f"  click-fallback failed for doc {doc_number}: {e}")
 
     return None, None, None
 
@@ -441,6 +489,27 @@ def enrich_from_lookup(rec, lookup_tuple):
     if not rec.get("is_entity"):
         rec["is_entity"] = result.get("is_entity", "0") == "1"
 
+    # Tenure — years owned from the roll's last-sale date (free, no live API)
+    if rec.get("tenure_years") is None:
+        yrs = years_owned_from_sale_date(result.get("sale_date", ""))
+        if yrs is not None:
+            rec["tenure_years"] = yrs
+            rec["tenure_score_bonus"] = tenure_bonus(yrs)
+            rec["deed_date"] = result.get("sale_date", "")
+
+    # Equity estimate — current appraised value minus what they paid.
+    # Rough signal only (doesn't account for improvements/market swings since
+    # purchase), but a fast way to flag high-equity motivated-seller leads.
+    if not rec.get("equity_est"):
+        try:
+            sale_price = float(result.get("sale_price", "") or 0)
+            appraised = float(rec.get("appraised_value", "") or result.get("appraised_value", "") or 0)
+            if sale_price > 0 and appraised > 0:
+                rec["last_sale_price"] = sale_price
+                rec["equity_est"] = round(appraised - sale_price, 0)
+        except Exception:
+            pass
+
     # Coastal flag
     rec["is_coastal"] = is_coastal(rec.get("zip", ""))
 
@@ -493,6 +562,8 @@ def new_record(doc_number, lead_type, source="publicsearch", run_ts=None):
         "tenure_years":     None,
         "tenure_score_bonus": 0,
         "deed_date":        "",
+        "last_sale_price":  "",
+        "equity_est":       "",
         "prop_id":          "",
         "ps_doc_id":        "",
         # Code enforcement fields
@@ -604,11 +675,6 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
                 else:
                     property_addr = raw_addr.upper()[:80]
 
-            ps_doc_id = ""
-            href = re.findall(r"/doc/(\d+)", row)
-            if href:
-                ps_doc_id = href[0]
-
             dates = [c for c in cells if re.match(r"^\d{1,2}/\d{1,2}/\d{4}$", c.strip())]
             recorded_date = dates[0] if dates else ""
 
@@ -673,7 +739,9 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
             )
 
             rec = new_record(doc_num, lead_type, run_ts=run_ts)
-            rec["ps_doc_id"]   = ps_doc_id
+            # Stored so the click-fallback knows which results page to reload
+            # to find this row again — stripped from records before saving.
+            rec["_source_url"] = url
             rec["owner"]       = grantor.title() if grantor else ""
             rec["lender"]      = lender
             rec["date_filed"]  = f"{month}/{year}".strip("/")
@@ -704,8 +772,7 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
         offset += 50
         time.sleep(1.5)
 
-    with_id = sum(1 for r in new_records if r.get("ps_doc_id"))
-    log.info(f"{department}/{search_term}: {len(new_records)} new records ({with_id} with ps_doc_id)")
+    log.info(f"{department}/{search_term}: {len(new_records)} new records")
     return new_records
 
 # ── Code Enforcement Scraper ──────────────────────────────────────────────────
@@ -957,12 +1024,12 @@ def main():
         # ── Selenium fallback: FC leads still missing address after roll match ──
         still_missing = [
             r for r in all_new
-            if r.get("type") in ("NOF", "TAX") and not r.get("address") and r.get("ps_doc_id")
+            if r.get("type") in ("NOF", "TAX") and not r.get("address") and r.get("_source_url")
         ]
         log.info(f"Selenium fallback: {len(still_missing)} FC leads still missing address")
         fetched = 0
         for rec in still_missing[:MAX_DOC_FETCH]:
-            street, city, zipc = fetch_doc_address(driver, rec["ps_doc_id"])
+            street, city, zipc = fetch_address_by_click(driver, rec["_source_url"], rec["doc_number"])
             if street:
                 rec["address"] = street.upper()
                 if city:
@@ -1035,6 +1102,11 @@ def main():
     log.info(f"  URGENT≤14d={urgent} | with_addr={with_addr} | coastal={coastal}")
 
     # ── Save ──────────────────────────────────────────────────────────────────
+    # _source_url is only needed during this run's click-fallback — strip it
+    # so it doesn't bloat records.json or leak into the dashboard.
+    for rec in all_records:
+        rec.pop("_source_url", None)
+
     RECORDS_PATH.parent.mkdir(parents=True, exist_ok=True)
     RECORDS_PATH.write_text(
         json.dumps(all_records, ensure_ascii=False),
