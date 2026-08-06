@@ -1,9 +1,11 @@
 name: Nueces CAD Roll Download
 
 on:
-  schedule:
-    - cron: '0 12 5 4 *'    # April 5 at noon UTC
-    - cron: '0 12 5 9 *'    # September 5 at noon UTC
+  # PAUSED 2026-08-06 per request -- schedule disabled, manual trigger still works.
+  # Uncomment the schedule block below to resume automatic runs.
+  # schedule:
+  #   - cron: '0 12 5 4 *'    # April 5 at noon UTC
+  #   - cron: '0 12 5 9 *'    # September 5 at noon UTC
   workflow_dispatch:
 
 permissions:
