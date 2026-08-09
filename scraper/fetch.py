@@ -540,6 +540,34 @@ def is_entity_name(name):
     upper = name.upper()
     return any(kw in upper for kw in ENTITY_FILTER_KW)
 
+
+# ── Address sanity check ────────────────────────────────────────────────────
+# 2026-08-07: same bug found and fixed in bexar-leads applies here -- the old
+# addr_candidates regex only checked "starts with digits then a letter", so
+# page footer/copyright text ("2026 Nueces County... All Rights Reserved.")
+# can slip through as a real address since the year reads as a street number.
+# Require an actual street-suffix word and reject known boilerplate phrases.
+STREET_SUFFIXES = {
+    "ST","AVE","DR","RD","LN","CT","CIR","BLVD","WAY","PL","TRL","PKWY",
+    "HWY","LOOP","PASS","CV","PT","HLS","TRAIL","GROVE","RIDGE","CREEK",
+    "LAKE","PARK","GLEN","RUN","XING","STREET","AVENUE","DRIVE","ROAD",
+    "LANE","COURT","CIRCLE","BOULEVARD","PLACE","TERRACE","TER","WALK",
+    "ROW","BND","BEND","VW","VIEW","COVE","MNR","MANOR","SQ","SQUARE",
+}
+GARBAGE_ADDRESS_KEYWORDS = [
+    "RIGHTS RESERVE", "COPYRIGHT", "ALL RIGHTS", "NUECES COUNTY,",
+    "CLERK OF", "GOVOS", "ACCESSIBILITY",
+]
+
+def _looks_like_address(s):
+    if not s:
+        return False
+    upper = s.upper()
+    if any(kw in upper for kw in GARBAGE_ADDRESS_KEYWORDS):
+        return False
+    words = re.split(r"[\s,]+", upper)
+    return any(w.rstrip(".") in STREET_SUFFIXES for w in words)
+
 def new_record(doc_number, lead_type, source="publicsearch", run_ts=None):
     return {
         "doc_number":       doc_number,
@@ -673,6 +701,7 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
                 and len(c) > 8
                 and "N/A" not in c.upper()
                 and not re.match(r"^\d{7,10}$", c)
+                and _looks_like_address(c)
             ]
             if addr_candidates:
                 raw_addr = addr_candidates[0]
