@@ -1,11 +1,10 @@
 name: Nueces Scrape and Deploy
 
 on:
-  # PAUSED 2026-08-06 per request -- schedule disabled, manual trigger still works.
-  # Uncomment the schedule block below to resume automatic runs.
-  # schedule:
-  #   - cron: '0 14 * * 1,4'   # Mon/Thu 9am CST (14:00 UTC)
-  #   - cron: '0 20 * * 1,4'   # Mon/Thu 3pm CST (20:00 UTC)
+  # Re-enabled 2026-08-09 after a clean test run post-fix.
+  schedule:
+    - cron: '0 14 * * 1,4'   # Mon/Thu 9am CST (14:00 UTC)
+    - cron: '0 20 * * 1,4'   # Mon/Thu 3pm CST (20:00 UTC)
   workflow_dispatch:
 
 permissions:
