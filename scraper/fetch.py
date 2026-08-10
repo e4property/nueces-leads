@@ -816,15 +816,33 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
 # ── Code Enforcement Scraper ──────────────────────────────────────────────────
 def scrape_code_enforcement(known_docs, run_ts):
     """
-    Scrape Corpus Christi code compliance cases from open data.
-    Uses the city's public ArcGIS feature service.
+    DISABLED 2026-08-10 — call site above now short-circuits to [] before this
+    ever runs. Left in place in case a real endpoint shows up later.
+
+    Confirmed dead end, checked 2026-08-10:
+    - Layer 43 on this FeatureServer is named "NCad_Parcels" but its actual
+      schema (fetched live) is only OBJECTID/AREA/PERIMETER/COUNTIES_/CODE/
+      NAME/ZONE/Shape__Area/Shape__Length — a boundary/zone layer, not
+      property-level parcel data. None of the outFields this function asks
+      for (PROP_ID, situs_disp, file_as_na, addr_zip, addr_city, appraised_,
+      state_cd) exist on it, hence the permanent 400.
+    - CC_CODE_URL above (the geojson constant) is a dead placeholder — that
+      hash isn't a real ArcGIS dataset id and nothing in this file uses it.
+    - Searched ArcGIS Online's public item index directly for Corpus
+      Christi code-enforcement/compliance/violation datasets — nothing
+      exists under this org or any other.
+    - The only real code-compliance data the city publishes is monthly PDF
+      "Citation Activity" reports (corpuschristitx.gov) — aggregate stats
+      only (e.g. citation counts), no individual case/address/owner data,
+      so not usable for lead generation even as a slower fallback.
+    - Conclusion: there is no public, case-level code-enforcement data
+      source for Corpus Christi/Nueces right now. Not a quick fix — would
+      need the city to actually publish one, or a different discovery pass
+      if their data posture changes.
     """
     new_records = []
     log.info("Scraping Corpus Christi code enforcement...")
 
-    # CC open data — no public CE case endpoint exists yet (program est. Sept 2025)
-    # Using NCad_Parcels (layer 43) from CC open data to find distressed properties
-    # This gives us parcels with code violations flagged in the CAD data
     endpoints = [
         "https://services.arcgis.com/0J4ZNc4NaTguvRy0/ArcGIS/rest/services/OpenData/FeatureServer/43/query",
     ]
@@ -1099,8 +1117,9 @@ def main():
         except Exception:
             pass
 
-    # Source 4: Code Enforcement (no Selenium needed)
-    ce_recs = scrape_code_enforcement(known_docs, run_ts)
+    # Source 4: Code Enforcement — DISABLED 2026-08-10, see scrape_code_enforcement()
+    # docstring for why. Re-enable once a real case-level endpoint is confirmed.
+    ce_recs = []
     all_new.extend(ce_recs)
 
     # Score/tag the code-enforcement batch too (it wasn't in enrich_targets above)
