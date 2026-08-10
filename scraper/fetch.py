@@ -998,19 +998,11 @@ def main():
     all_new = []
 
     try:
-        # Source 1: FC department — ALL foreclosure notices (blank search = all docs)
-        # Nueces uses "FORECLOSURE NOTICE" doc type — blank search catches everything
-        nof_recs = scrape_publicsearch(
-            department="FC",
-            search_term="",
-            lead_type="NOF",
-            known_docs=known_docs,
-            driver=driver,
-            run_ts=run_ts,
-        )
-        all_new.extend(nof_recs)
-
-        # Source 2: FC department — TAX foreclosures (separate search)
+        # Source 1: FC department — TAX foreclosures (must run BEFORE the blank
+        # NOF search below — known_docs is shared/mutated across both calls, and
+        # since blank search_term="" matches every FC-department doc, running it
+        # first was silently claiming every TAX doc as NOF before the TAX-specific
+        # search ever saw them. TAX leads first, then NOF sweeps up whatever's left.
         tax_recs = scrape_publicsearch(
             department="FC",
             search_term="TAX",
@@ -1020,6 +1012,19 @@ def main():
             run_ts=run_ts,
         )
         all_new.extend(tax_recs)
+
+        # Source 2: FC department — ALL remaining foreclosure notices (blank
+        # search = all docs). Nueces uses "FORECLOSURE NOTICE" doc type — blank
+        # search catches everything not already claimed by the TAX search above.
+        nof_recs = scrape_publicsearch(
+            department="FC",
+            search_term="",
+            lead_type="NOF",
+            known_docs=known_docs,
+            driver=driver,
+            run_ts=run_ts,
+        )
+        all_new.extend(nof_recs)
 
         # Source 3: RP department — Appointment of Substitute Trustee (Pre-Fore)
         appt_recs = scrape_publicsearch(
