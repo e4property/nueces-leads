@@ -353,11 +353,35 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 .dsec{padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
 .dsec-lbl{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:10px;display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace}
 .dsec-lbl::after{content:'';flex:1;height:1px;background:var(--border)}
-.fin-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:7px;margin-bottom:8px}
+.fin-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:7px;margin-bottom:8px}
 .fin-grid-2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}
 .fin-card{background:var(--bg2);border-radius:6px;padding:9px;border:1px solid var(--border)}
 .fin-card.tenure-card{border-color:var(--teal-mid);background:var(--teal-bg)}
 .fin-card.arv-card{border-color:var(--blue-mid);background:var(--blue-bg)}
+.mao-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.mao-field label{display:block;font-size:9px;color:var(--muted);margin-bottom:3px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em}
+.mao-field select,.mao-field input{width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:12px;font-family:'Inter',sans-serif}
+.mao-ticker{display:flex;align-items:center;gap:4px}
+.mao-ticker input{width:100%;text-align:center;padding:6px 4px;-moz-appearance:textfield}
+.mao-ticker input::-webkit-inner-spin-button,.mao-ticker input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.mao-ticker-pct{font-size:11px;color:var(--muted);flex:none}
+.mao-ticker-btn{flex:none;width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.mao-ticker-btn:hover{background:var(--border)}
+.mao-result{background:var(--teal-bg);border:1px solid var(--teal-mid);border-radius:var(--r);padding:12px;text-align:center;margin-bottom:8px}
+.mao-result-num{font-size:24px;font-weight:700;color:var(--teal-dk);font-family:'DM Mono',monospace}
+.mao-result-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+.mao-breakdown{font-size:11px;color:var(--dim);line-height:1.8;font-family:'DM Mono',monospace}
+.mao-breakdown .row{display:flex;justify-content:space-between}
+.mao-warn{background:var(--red-bg);border:1px solid var(--red-mid);border-radius:6px;padding:8px 10px;font-size:11px;color:var(--red-dk);margin-top:8px;line-height:1.5}
+.mao-net{background:var(--blue-bg);border:1px solid var(--blue-mid);border-radius:var(--r);padding:10px;text-align:center;margin-top:8px}
+.mao-net-num{font-size:18px;font-weight:700;color:var(--blue-dk);font-family:'DM Mono',monospace}
+.mao-net-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+.mao-base-note{font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim);font-size:10px}
+.mao-offer-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-top:8px}
+.mao-offer-range{background:var(--teal-bg);border:1px solid var(--teal-mid);border-radius:6px;padding:8px;text-align:center;margin:8px 0;font-family:'DM Mono',monospace;font-size:15px;font-weight:700;color:var(--teal-dk)}
+.mao-offer-status{font-size:10px;color:var(--muted);margin-top:6px;text-align:center;line-height:1.5}
+.mao-mark-label{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);margin:8px 0;line-height:1.4;cursor:pointer}
+.mao-mark-label input{flex:none;width:auto;margin:0}
 .fin-val{font-family:'DM Mono',monospace;font-size:15px;font-weight:700;color:var(--text);line-height:1}
 .fin-val.blue{color:var(--blue-dk)}.fin-val.amber{color:var(--amber-dk)}.fin-val.red{color:var(--red-dk)}.fin-val.teal{color:var(--teal-dk)}
 .fin-key{font-size:8px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
@@ -670,6 +694,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
             <div class="dsec-lbl">🏦 Financial Intel</div>
             <div class="fin-grid">
               <div class="fin-card"><div class="fin-val amber" id="m-appraised">—</div><div class="fin-key">Appraised</div></div>
+              <div class="fin-card arv-card"><div class="fin-val teal" id="m-arv">—</div><div class="fin-key" id="m-arv-key">ARV Est.</div></div>
               <div class="fin-card"><div class="fin-val" id="m-amount">—</div><div class="fin-key">Loan Amount</div></div>
               <div class="fin-card"><div class="fin-val blue" id="m-equity">—</div><div class="fin-key">Equity Est.</div></div>
               <div class="fin-card"><div class="fin-val" id="m-ltv">—</div><div class="fin-key">LTV</div></div>
@@ -689,6 +714,47 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
             <div class="eq-labels"><span>Loan</span><span id="eq-center-lbl" style="font-weight:500">—</span><span>Appraised</span></div>
             <div class="eq-track"><div class="eq-fill" id="eq-fill" style="width:0%"></div></div>
             <div class="sig-box" id="sig-box" style="display:none"></div>
+          </div>
+          <div class="dsec">
+            <div class="dsec-lbl">🧮 MAO Calculator <span class="mao-base-note" id="mao-base-note"></span></div>
+            <div class="mao-controls">
+              <div class="mao-field"><label>Repair Tier</label>
+                <select id="mao-tier" onchange="updateMAO()">
+                  <option value="20">Light — $20/sqft</option>
+                  <option value="40" selected>Medium — $40/sqft</option>
+                  <option value="75">Heavy — $75/sqft</option>
+                </select>
+              </div>
+              <div class="mao-field"><label>Discount off Base</label>
+                <div class="mao-ticker">
+                  <button type="button" class="mao-ticker-btn" onclick="bumpDiscount(-1)">−</button>
+                  <input type="number" id="mao-discount" min="60" max="80" step="1" value="70" oninput="updateMAO()">
+                  <span class="mao-ticker-pct">%</span>
+                  <button type="button" class="mao-ticker-btn" onclick="bumpDiscount(1)">+</button>
+                </div>
+              </div>
+            </div>
+            <div class="mao-controls">
+              <div class="mao-field"><label>Repair Budget ($)</label><input type="number" id="mao-repair" step="500" oninput="updateMAO(true)"></div>
+              <div class="mao-field"><label>Wholesale Fee ($)</label><input type="number" id="mao-fee" step="500" value="12000" oninput="updateMAO()"></div>
+            </div>
+            <div class="mao-result">
+              <div class="mao-result-num" id="mao-result">—</div>
+              <div class="mao-result-lbl">Max Allowable Offer</div>
+            </div>
+            <div class="mao-breakdown" id="mao-breakdown"></div>
+            <div class="mao-net" id="mao-net" style="display:none">
+              <div class="mao-net-num" id="mao-net-num">—</div>
+              <div class="mao-net-lbl" id="mao-net-lbl">Est. Net to Seller</div>
+            </div>
+            <div class="mao-warn" id="mao-warn" style="display:none"></div>
+            <div class="mao-offer-box" id="mao-offer-box" style="display:none">
+              <div class="mao-field"><label>Target Offer ($) <span style="font-weight:400;text-transform:none;letter-spacing:0">— what you're actually prepared to pay</span></label><input type="number" id="mao-target" step="500" oninput="updateMAO(false,true)"></div>
+              <div class="mao-offer-range" id="mao-offer-range">—</div>
+              <label class="mao-mark-label" id="mao-mark-wrap" style="display:none"><input type="checkbox" id="mao-mark-offer" onchange="toggleMarkBotOffer()"> Mark for Bot Offer — include this range automatically when I push this lead to Jarvis</label>
+              <button class="act-btn" id="btn-bot-offer" onclick="enableBotOffer()" style="width:100%;display:none">🎯 Enable Bot Offer</button>
+              <div class="mao-offer-status" id="mao-offer-status"></div>
+            </div>
           </div>
           <div class="dsec">
             <div class="dsec-lbl">📞 ForeWarn</div>
@@ -1117,6 +1183,10 @@ function populateDetail(lead){
   const appr=parseFloat(lead.appraised_value)||0,loan=parseFloat((lead.loan_amount+'').replace(/[$,]/g,''))||0;
   const eq=appr&&loan?appr-loan:null,ltv=appr&&loan?Math.round(loan/appr*100):null;
   document.getElementById('m-appraised').textContent=appr?'$'+appr.toLocaleString():'—';
+  const arv=parseFloat(lead.arv_estimate)||0;
+  document.getElementById('m-arv').textContent=arv?'$'+arv.toLocaleString():'—';
+  document.getElementById('m-arv-key').textContent=lead.arv_status?`ARV Est. (${lead.arv_status.replace(/_/g,' ')})`:'ARV Est.';
+  initMAO(lead,appr,arv);
   document.getElementById('m-amount').textContent=lead.loan_amount||'—';
   const eqEl=document.getElementById('m-equity');eqEl.textContent=eq!=null?(eq>=0?'$'+Math.abs(eq).toLocaleString():'($'+Math.abs(eq).toLocaleString()+')'):'—';eqEl.className='fin-val '+(eq!=null?(eq>=0?'blue':'red'):'');
   document.getElementById('m-ltv').textContent=ltv!=null?ltv+'%':'—';
@@ -1210,6 +1280,146 @@ function clearPhone(){if(!confirm('Clear phone?'))return;if(S.leads[selectedDoc]
 function skipLead(){if(!S.leads[selectedDoc])S.leads[selectedDoc]={};S.leads[selectedDoc].skipped=!S.leads[selectedDoc].skipped;saveState();filterLeads();toast('Skipped');setTimeout(()=>navNextUnworked(),300);}
 function setDispo(doc,dispo){if(!S.leads[doc])S.leads[doc]={};S.leads[doc].dispo=dispo;saveState();renderDispoTrack(doc,dispo);renderList();updateStats();if(S.ghlApiKey&&S.leads[doc]?.ghlId)updateGHLTag(S.leads[doc].ghlId,dispo);writeBackToRepo(doc,{dash_dispo:dispo});toast(`Dispo → ${dispo}`);}
 function saveNotes(){if(!selectedDoc)return;if(!S.leads[selectedDoc])S.leads[selectedDoc]={};const notes=document.getElementById('notes-area').value;S.leads[selectedDoc].notes=notes;saveState();writeBackToRepo(selectedDoc,{dash_notes:notes});}
+/* MAO Calculator — ported from bexar-leads 2026-08-20. Base = arv_estimate
+   when available (real sold-comp AVM), falls back to appraised_value
+   otherwise (runs high vs. actual market value — flagged in the UI
+   whenever it's the fallback, never presented as equally trustworthy).
+   maoRepairManual tracks whether the operator has hand-edited the repair
+   budget so switching tiers doesn't clobber a manual override. */
+const MAO_CLOSING_COST=2000; // matches EST_CLOSING_COST in pushGHL — keep these two in sync
+let maoLeadDoc=null, maoBase=0, maoBaseSrc='', maoSqft=0, maoPayoff=0, maoRepairManual=false, maoTargetManual=false;
+const OFFER_GAP=5000, OFFER_SPREAD=10000; // stated range sits $5k-$15k under target (e.g. target 85k -> "70-80")
+
+function initMAO(lead,appr,arv){
+  if(lead.doc_number!==maoLeadDoc){maoRepairManual=false;maoTargetManual=false;maoLeadDoc=lead.doc_number;}
+  if(arv){maoBase=arv;maoBaseSrc='arv';}
+  else if(appr){maoBase=appr;maoBaseSrc='appraised';}
+  else{maoBase=0;maoBaseSrc='';}
+  maoSqft=parseFloat(lead.arv_sqft)||0;
+  maoPayoff=parseFloat((lead.loan_amount+'').replace(/[$,]/g,''))||0;
+  const noteEl=document.getElementById('mao-base-note');
+  if(!maoBase)noteEl.textContent='no ARV or appraised value yet';
+  else if(maoBaseSrc==='arv')noteEl.textContent=`base: ARV $${maoBase.toLocaleString()}`;
+  else noteEl.textContent=`⚠ base: appraised value $${maoBase.toLocaleString()} — no ARV yet, appraised often runs high, verify before offering`;
+  updateMAO();
+}
+
+function bumpDiscount(delta){
+  const el=document.getElementById('mao-discount');
+  el.value=Math.min(80,Math.max(60,(parseFloat(el.value)||70)+delta));
+  updateMAO();
+}
+
+function updateMAO(manualRepair,manualTarget){
+  if(manualRepair)maoRepairManual=true;
+  if(manualTarget)maoTargetManual=true;
+  const tierRate=parseFloat(document.getElementById('mao-tier').value)||0;
+  const repairEl=document.getElementById('mao-repair');
+  if(!maoRepairManual)repairEl.value=maoSqft?Math.round(tierRate*maoSqft):'';
+  const discountEl=document.getElementById('mao-discount');
+  const discountPct=Math.min(80,Math.max(60,parseFloat(discountEl.value)||70));
+  discountEl.value=discountPct;
+  const discount=discountPct/100;
+  const repair=parseFloat(repairEl.value)||0;
+  const fee=parseFloat(document.getElementById('mao-fee').value)||0;
+  const resultEl=document.getElementById('mao-result');
+  const breakdownEl=document.getElementById('mao-breakdown');
+  const warnEl=document.getElementById('mao-warn');
+  if(!maoBase){
+    resultEl.textContent='—';breakdownEl.innerHTML='';warnEl.style.display='none';
+    document.getElementById('mao-offer-box').style.display='none';
+    return;
+  }
+  const subtotal=maoBase*discount;
+  const mao=subtotal-repair-fee;
+  resultEl.textContent='$'+Math.round(mao).toLocaleString();
+  resultEl.style.color=mao>0?'var(--teal-dk)':'var(--red-dk)';
+  breakdownEl.innerHTML=
+    `<div class="row"><span>Base (${maoBaseSrc==='arv'?'ARV':'Appraised'}) × ${Math.round(discount*100)}%</span><span>$${Math.round(subtotal).toLocaleString()}</span></div>`+
+    `<div class="row"><span>− Repair budget${maoSqft&&!maoRepairManual?` (${maoSqft.toLocaleString()} sqft)`:''}</span><span>$${Math.round(repair).toLocaleString()}</span></div>`+
+    `<div class="row"><span>− Wholesale fee</span><span>$${Math.round(fee).toLocaleString()}</span></div>`;
+  if(mao<=0){warnEl.style.display='block';warnEl.textContent='This tier/discount combo leaves nothing after repairs and fee — this deal likely doesn\'t work at this repair level. Try a lighter tier or pass.';}
+  else if(!maoSqft&&!maoRepairManual){warnEl.style.display='block';warnEl.textContent='No sqft data yet for this lead — repair budget defaulted to $0, enter one manually.';}
+  else warnEl.style.display='none';
+
+  const netEl=document.getElementById('mao-net'),netNumEl=document.getElementById('mao-net-num'),netLblEl=document.getElementById('mao-net-lbl');
+  if(maoPayoff>0){
+    const net=Math.max(0,mao-maoPayoff-MAO_CLOSING_COST);
+    netEl.style.display='block';
+    netNumEl.textContent='$'+Math.round(net).toLocaleString();
+    netLblEl.textContent=`Est. Net to Seller (after $${maoPayoff.toLocaleString()} payoff + ~$${MAO_CLOSING_COST.toLocaleString()} closing)`;
+  }else{
+    netEl.style.display='none';
+  }
+
+  const offerBox=document.getElementById('mao-offer-box'),targetEl=document.getElementById('mao-target'),rangeEl=document.getElementById('mao-offer-range'),btnOffer=document.getElementById('btn-bot-offer'),statusEl=document.getElementById('mao-offer-status'),markWrap=document.getElementById('mao-mark-wrap'),markCb=document.getElementById('mao-mark-offer');
+  offerBox.style.display='block';
+  if(!maoTargetManual)targetEl.value=mao>0?Math.round(mao):'';
+  const target=parseFloat(targetEl.value)||0;
+  const top=Math.max(0,Math.floor((target-OFFER_GAP)/1000)*1000);
+  const bottom=Math.max(0,top-OFFER_SPREAD);
+  const rangeOk=target>0&&bottom>0;
+  if(target<=0)rangeEl.textContent='—';
+  else if(bottom<=0)rangeEl.textContent='Target too low for a clean range';
+  else rangeEl.textContent=`Say: $${bottom.toLocaleString()} – $${top.toLocaleString()}`;
+  const lead=allLeads.find(l=>l.doc_number===maoLeadDoc);
+  const ls=lead?LS(lead.doc_number):null;
+  const local=lead?S.leads[lead.doc_number]:null;
+  if(!ls||!ls.ghlId){
+    markWrap.style.display='flex';btnOffer.style.display='none';
+    markCb.checked=!!(local&&local.botOfferMarked);
+    markCb.disabled=!rangeOk;
+    if(!rangeOk)statusEl.textContent='Enter a target offer to mark this lead.';
+    else if(markCb.checked)statusEl.textContent='Marked — will be included automatically when you push this lead to Jarvis.';
+    else statusEl.textContent='Not marked — will push as a normal lead with no offer numbers.';
+  }else{
+    markWrap.style.display='none';btnOffer.style.display='block';
+    btnOffer.disabled=!rangeOk;
+    if(local&&local.botOfferEnabled)statusEl.textContent=`✓ Bot offer enabled — $${local.botOfferLow.toLocaleString()}–$${local.botOfferHigh.toLocaleString()} (re-enable to update)`;
+    else statusEl.textContent='Not yet enabled — bot will not mention numbers until you click this.';
+  }
+}
+
+function toggleMarkBotOffer(){
+  const lead=allLeads.find(l=>l.doc_number===maoLeadDoc);
+  if(!lead)return;
+  if(!S.leads[lead.doc_number])S.leads[lead.doc_number]={};
+  S.leads[lead.doc_number].botOfferMarked=document.getElementById('mao-mark-offer').checked;
+  saveState();
+  updateMAO();
+}
+
+async function enableBotOffer(){
+  const lead=allLeads.find(l=>l.doc_number===selectedDoc);
+  if(!lead)return;
+  const ls=LS(lead.doc_number);
+  if(!ls.ghlId){toast('Push this lead to Jarvis first','err');return;}
+  const target=parseFloat(document.getElementById('mao-target').value)||0;
+  const top=Math.max(0,Math.floor((target-OFFER_GAP)/1000)*1000);
+  const bottom=Math.max(0,top-OFFER_SPREAD);
+  if(target<=0||bottom<=0){toast('Enter a valid target offer first','err');return;}
+  const btn=document.getElementById('btn-bot-offer');
+  const origLabel=btn.textContent;
+  btn.disabled=true;btn.textContent='Enabling…';
+  try{
+    const cfRes=await fetch(`https://services.leadconnectorhq.com/contacts/${ls.ghlId}`,{method:'PUT',headers:{'Authorization':'Bearer '+S.ghlApiKey,'Content-Type':'application/json','Version':'2021-07-28'},body:JSON.stringify({customFields:[{key:'offer_low',field_value:String(bottom)},{key:'offer_high',field_value:String(top)}]})});
+    if(!cfRes.ok)throw new Error('customFields update failed');
+    await fetch(`https://services.leadconnectorhq.com/contacts/${ls.ghlId}/tags/`,{method:'POST',headers:{'Authorization':'Bearer '+S.ghlApiKey,'Content-Type':'application/json','Version':'2021-07-28'},body:JSON.stringify({tags:['bot_offer_enabled']})});
+    if(!S.leads[lead.doc_number])S.leads[lead.doc_number]={};
+    S.leads[lead.doc_number].botOfferEnabled=true;
+    S.leads[lead.doc_number].botOfferLow=bottom;
+    S.leads[lead.doc_number].botOfferHigh=top;
+    S.leads[lead.doc_number].botOfferAt=Date.now();
+    saveState();
+    toast(`✓ Bot offer enabled — $${bottom.toLocaleString()}–$${top.toLocaleString()}`,'ok');
+    btn.textContent=origLabel;
+    updateMAO();
+  }catch(e){
+    toast('Failed to enable bot offer — check GHL connection','err');
+    btn.disabled=false;btn.textContent=origLabel;
+  }
+}
+
 function copyAddress(){const lead=allLeads.find(l=>l.doc_number===selectedDoc);if(!lead)return;const addressInput=document.getElementById('sf-address'),cityInput=document.getElementById('sf-city'),zipInput=document.getElementById('sf-zip');const addr=(addressInput&&addressInput.value.trim())||toTitle(lead.address||'');const city=(cityInput&&cityInput.value.trim())||toTitle(lead.city||'');const zip=(zipInput&&zipInput.value.trim())||lead.zip;navigator.clipboard.writeText(`${addr}, ${city} TX ${zip}`);toast('Address copied');}
 function openGHL(){const ls=LS(selectedDoc);window.open(ls.ghlId?`https://app.justjarvis.com/v2/location/${S.ghlLocationId}/contacts/detail/${ls.ghlId}`:'https://app.justjarvis.com','_blank');}
 
@@ -1246,10 +1456,29 @@ async function pushGHL(lead,phone){
   const baseTags=appt?['forewarn_searched']:['nueces_lead','forewarn_searched'];
   const tags=[...baseTags,ghlTag];
   if(stacked){tags.push('nueces_stacked','nueces_vbp','nueces_ce');if(isVBPDangerous(lead))tags.push('ce_dangerous');}else if(vbp)tags.push('nueces_vbp');else if(ce){tags.push('nueces_ce');if(lead.flags?.includes('DANGEROUS PREMISES'))tags.push('ce_dangerous');}else if(lp)tags.push('nueces_lp');else if(appt){/* nueces_prefore already added via ghlTag above */}else{tags.push('nueces-contacted');if(lead.absentee)tags.push('absentee');if(lead.type==='TAX')tags.push('tax_foreclosure');if(lead.is_new)tags.push('new_lead');}if(isLongHeld(lead))tags.push('long_held');
+  // Bot-offer bracket, ported from bexar-leads 2026-08-20: primary path is
+  // marking a lead (mao-mark-offer checkbox, only shown pre-push) BEFORE
+  // pushing -- if marked, the range computed from the currently-open lead's
+  // Target Offer field goes out in this SAME initial contact creation.
+  // enableBotOffer() still exists for leads pushed before being marked --
+  // a retroactive add, not the main flow.
+  let offerLow=null,offerHigh=null;
+  if(S.leads[lead.doc_number]&&S.leads[lead.doc_number].botOfferMarked&&lead.doc_number===maoLeadDoc){
+    const targetEl=document.getElementById('mao-target');
+    const target=targetEl?parseFloat(targetEl.value)||0:0;
+    const top=Math.max(0,Math.floor((target-OFFER_GAP)/1000)*1000);
+    const bottom=Math.max(0,top-OFFER_SPREAD);
+    if(target>0&&bottom>0){offerLow=bottom;offerHigh=top;tags.push('bot_offer_enabled');}
+  }
   const body={firstName:first||'',lastName:last||addrTitle||'',phone,address1:addrTitle,city:cityTitle,state:'TX',postalCode:zipVal,tags,locationId:S.ghlLocationId,source:'nueces-leads'};
+  if(offerLow!=null)body.customFields=[{key:'offer_low',field_value:String(offerLow)},{key:'offer_high',field_value:String(offerHigh)}];
   const res=await fetch('https://services.leadconnectorhq.com/contacts/',{method:'POST',headers:{'Authorization':'Bearer '+S.ghlApiKey,'Content-Type':'application/json','Version':'2021-07-28'},body:JSON.stringify(body)});
   const data=await res.json(),id=data.contact?.id||data.id;
-  if(id){S.leads[lead.doc_number].ghlId=id;S.leads[lead.doc_number].ghl_pushed=true;saveState();setGhlDot(true);return id;}else{setGhlDot(false);return null;}}catch(e){setGhlDot(false);return null;}
+  if(id){
+    S.leads[lead.doc_number].ghlId=id;S.leads[lead.doc_number].ghl_pushed=true;
+    if(offerLow!=null){S.leads[lead.doc_number].botOfferEnabled=true;S.leads[lead.doc_number].botOfferLow=offerLow;S.leads[lead.doc_number].botOfferHigh=offerHigh;S.leads[lead.doc_number].botOfferAt=Date.now();}
+    saveState();setGhlDot(true);return id;
+  }else{setGhlDot(false);return null;}}catch(e){setGhlDot(false);return null;}
 }
 
 async function updateGHLTag(contactId,dispo){const tagMap={contacted:'dispo_contacted',responded:'dispo_responded',deal:'dispo_deal',dead:'dispo_dead'},tag=tagMap[dispo];if(!tag)return;try{await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}/tags/`,{method:'POST',headers:{'Authorization':'Bearer '+S.ghlApiKey,'Content-Type':'application/json','Version':'2021-07-28'},body:JSON.stringify({tags:[tag]})});}catch(e){}}
