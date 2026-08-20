@@ -8,6 +8,23 @@ Enrichment: Nueces CAD appraisal roll lookup CSV (legal desc → address/owner/v
 GHL tags: nueces_lead, nueces_prefore, nueces_ce
 Scrape schedule: Mon/Thu 9am + 3pm CST (14:00 + 20:00 UTC)
 
+v1.3 changes (address fallback now covers the backlog, not just new leads):
+  - Confirmed via data audit 2026-08-20: 100/278 records missing address,
+    100% of them type=APPT. Root cause: the v1.2 fallback only ever ran
+    against all_new (this run's brand-new leads) and only for type
+    NOF/TAX -- APPT was never included, and source_url (which the old
+    fallback depends on) is stripped from every record before saving, so
+    it can't be used on anything from a previous run either. Existing
+    backlog leads were structurally unreachable no matter how many runs
+    passed. Same bug shape as the Bexar scraper's loan_amount/_source_url
+    issue fixed the same day.
+  - REPLACED fetch_address_by_click() (source_url + same-run only) with
+    fetch_address_by_docnumber() -- looks up any doc number directly via
+    quickSearch (scoped to its filing department, NOF/TAX=FC, APPT=RP),
+    so it works on ANY record regardless of type or age. The Selenium
+    fallback loop now runs against the full backlog (existing + new),
+    not just this run's new leads.
+
 v1.2 changes (address fallback rewrite):
   - Confirmed via DOM inspection (Aug 3 session): PublicSearch's FC results
     table has NO href, NO data-id, NO static identifier anywhere in the row
@@ -275,65 +292,87 @@ DOC_ADDR_GENERIC_RE = re.compile(
     r"(\d{1,6}\s+[A-Z0-9.\-\/ ]{3,40}?)\s+([A-Z][A-Z .]{2,25}?)\s+TX\s+(\d{5})"
 )
 
-def fetch_address_by_click(driver, source_url, doc_number, timeout=20):
+def _parse_address_from_current_page(driver, doc_number):
     """
-    Fallback for FC leads that don't get a roll match. PublicSearch's results
-    table is a pure React SPA with NO href/data-id anywhere in the row HTML
-    (confirmed via DOM inspection) — the internal doc ID only exists in JS
-    state and shows up in the URL after a client-side route change from a
-    row click. So instead of scraping a link that doesn't exist, this reloads
-    the exact results page the row came from, finds that row by its visible
-    doc number, clicks it, waits for the route to land on /doc/<id>, then
-    pulls the address out of the doc page header.
+    Shared by both address-fallback paths below -- assumes the driver has
+    already landed on a /doc/<id> page and just pulls the address out of it.
     Returns (street, city, zip) or (None, None, None).
     """
-    if not source_url or not doc_number:
+    landed_url = driver.current_url
+    text_plain = re.sub(r"<[^>]+>", " ", driver.page_source)
+    text_plain = re.sub(r"\s+", " ", text_plain)
+
+    # Prefer a labeled "Property Address" block if the page has one
+    m = DOC_ADDR_LABEL_RE.search(text_plain)
+    if m:
+        m2 = DOC_ADDR_GENERIC_RE.search(m.group(1) + " TX 00000")
+        if m2:
+            return m2.group(1).strip(), m2.group(2).strip(), m2.group(3).strip()
+
+    # Otherwise scan the whole page for a street/city/TX/zip pattern
+    for m in DOC_ADDR_GENERIC_RE.finditer(text_plain):
+        street, city, zipc = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+        if zipc.startswith("78"):  # sanity check — South Texas zip
+            return street, city, zipc
+
+    # Nothing matched — log exactly what we landed on so this is
+    # debuggable from the Action log instead of a silent 0/N.
+    snippet = text_plain[:400]
+    log.warning(
+        f"  address-fallback: doc {doc_number} landed on {landed_url} "
+        f"but no address pattern matched. Page text starts: {snippet!r}"
+    )
+    return None, None, None
+
+
+# department a doc number was originally filed under -- quickSearch results
+# seem to be scoped by department, so an APPT (RP) doc number won't show up
+# in an FC-scoped search and vice versa.
+DEPT_BY_TYPE = {"NOF": "FC", "TAX": "FC", "APPT": "RP"}
+
+
+def fetch_address_by_docnumber(driver, doc_number, department, timeout=20):
+    """
+    v1.3: address fallback for the BACKLOG, not just this run's new leads.
+    fetch_address_by_click() only works when source_url is still in memory
+    (same-run leads only) -- confirmed via the address-fill audit 2026-08-20:
+    100/278 Nueces records missing address, ALL type=APPT, because the old
+    fallback loop only ever considered NOF/TAX and only ever ran against
+    all_new, never the existing backlog. This looks the doc number up
+    directly via quickSearch instead of replaying a stored results-page URL,
+    so it works for ANY doc number regardless of type or when it was first
+    scraped -- same fix pattern already proven on the Bexar scraper's
+    goto_doc_by_docnumber() for the analogous loan_amount backlog problem.
+    Returns (street, city, zip) or (None, None, None).
+    """
+    if not doc_number:
         return None, None, None
+    today_str = TODAY.strftime("%Y%m%d")
+    url = (
+        f"{PUBLICSEARCH_BASE}/results"
+        f"?department={department}"
+        f"&keywordSearch=false"
+        f"&recordedDateRange=18000101%2C{today_str}"
+        f"&searchOcrText=false"
+        f"&searchType=quickSearch"
+        f"&searchValue={urllib.parse.quote(str(doc_number))}"
+    )
     try:
-        driver.get(source_url)
+        driver.get(url)
         WebDriverWait(driver, timeout).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table tr td"))
         )
         time.sleep(1)
 
-        row_xpath = f"//tr[.//span[normalize-space(text())='{doc_number}']]"
-        row = WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located((By.XPATH, row_xpath))
-        )
-        clickable = row.find_element(By.CSS_SELECTOR, "td.col-3")
-        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", clickable)
-        clickable.click()
-
+        row = driver.find_element(By.CSS_SELECTOR, "table tbody tr")
+        row.click()
         WebDriverWait(driver, timeout).until(EC.url_contains("/doc/"))
         time.sleep(1.5)
 
-        landed_url = driver.current_url
-        text_plain = re.sub(r"<[^>]+>", " ", driver.page_source)
-        text_plain = re.sub(r"\s+", " ", text_plain)
-
-        # Prefer a labeled "Property Address" block if the page has one
-        m = DOC_ADDR_LABEL_RE.search(text_plain)
-        if m:
-            m2 = DOC_ADDR_GENERIC_RE.search(m.group(1) + " TX 00000")
-            if m2:
-                return m2.group(1).strip(), m2.group(2).strip(), m2.group(3).strip()
-
-        # Otherwise scan the whole page for a street/city/TX/zip pattern
-        for m in DOC_ADDR_GENERIC_RE.finditer(text_plain):
-            street, city, zipc = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
-            if zipc.startswith("78"):  # sanity check — South Texas zip
-                return street, city, zipc
-
-        # Nothing matched — log exactly what we landed on so this is
-        # debuggable from the Action log instead of a silent 0/N.
-        snippet = text_plain[:400]
-        log.warning(
-            f"  click-fallback: doc {doc_number} landed on {landed_url} "
-            f"but no address pattern matched. Page text starts: {snippet!r}"
-        )
+        return _parse_address_from_current_page(driver, doc_number)
 
     except Exception as e:
-        log.warning(f"  click-fallback failed for doc {doc_number}: {e}")
+        log.warning(f"  docnumber-fallback failed for doc {doc_number} (dept={department}): {e}")
 
     return None, None, None
 
@@ -1085,15 +1124,20 @@ def main():
                 enriched += 1
         log.info(f"Roll enrichment: {enriched}/{len(all_new)} new-lead addresses filled")
 
-        # ── Selenium fallback: FC leads still missing address after roll match ──
+        # ── Selenium fallback: any lead still missing address after roll match ──
+        # v1.3: covers the full backlog (enrich_targets = all_new + existing),
+        # not just this run's new NOF/TAX leads -- see fetch_address_by_docnumber
+        # docstring for why the old all_new-only, NOF/TAX-only, source_url-gated
+        # version left the entire APPT backlog permanently unaddressed.
         still_missing = [
-            r for r in all_new
-            if r.get("type") in ("NOF", "TAX") and not r.get("address") and r.get("_source_url")
+            r for r in enrich_targets
+            if r.get("type") in ("NOF", "TAX", "APPT") and not r.get("address") and r.get("doc_number")
         ]
-        log.info(f"Selenium fallback: {len(still_missing)} FC leads still missing address")
+        log.info(f"Selenium fallback: {len(still_missing)} leads still missing address (backlog + new)")
         fetched = 0
         for rec in still_missing[:MAX_DOC_FETCH]:
-            street, city, zipc = fetch_address_by_click(driver, rec["_source_url"], rec["doc_number"])
+            department = DEPT_BY_TYPE.get(rec.get("type"), "RP")
+            street, city, zipc = fetch_address_by_docnumber(driver, rec["doc_number"], department)
             if street:
                 rec["address"] = street.upper()
                 if city:
