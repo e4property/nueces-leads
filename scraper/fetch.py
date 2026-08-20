@@ -8,6 +8,27 @@ Enrichment: Nueces CAD appraisal roll lookup CSV (legal desc → address/owner/v
 GHL tags: nueces_lead, nueces_prefore, nueces_ce
 Scrape schedule: Mon/Thu 9am + 3pm CST (14:00 + 20:00 UTC)
 
+v1.4 changes (fixed the actual search mechanism, not just its scope):
+  - v1.3's fetch_address_by_docnumber() still had a 100% failure rate even
+    after covering the full backlog -- confirmed live 2026-08-20 via the
+    site's own Advanced Search UI that searchType=quickSearch is a
+    keyword/party-name search, not an exact document-number lookup. It
+    returns "No Results" for every doc number regardless of validity.
+    doc_number itself was never wrong (unlike the analogous Bexar bug) --
+    only the URL was. Real mechanism: searchType=advancedSearch with
+    documentNumberRange as a JSON array (found in the "Single Document
+    Numbers" Advanced Search field). Verified end-to-end against a real
+    doc (2026026641) -- exact match. Also fixed row.click() on the <tr>
+    not triggering navigation -- needs a click on td.col-3 specifically.
+  - Real, structural limit found in the same investigation: APPT
+    (Appointment of Substitute Trustee) documents genuinely have no
+    Property Address field on the source page itself ("No property
+    address found") -- this isn't a bug, TX law doesn't require this
+    document type to state the property location. A Marginal Reference
+    on the doc links to the actual Deed of Trust, which likely does have
+    it -- a same-pattern second hop (like Bexar's Notice -> Deed of Trust
+    OCR chain) would close this, not yet built.
+
 v1.3 changes (address fallback now covers the backlog, not just new leads):
   - Confirmed via data audit 2026-08-20: 100/278 records missing address,
     100% of them type=APPT. Root cause: the v1.2 fallback only ever ran
@@ -348,14 +369,24 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=20):
     if not doc_number:
         return None, None, None
     today_str = TODAY.strftime("%Y%m%d")
+    # v1.4: was searchType=quickSearch&searchValue={doc_number} -- confirmed
+    # live 2026-08-20 via the site's own Advanced Search UI that quickSearch
+    # is a keyword/party-name search, NOT an exact document-number lookup;
+    # it returned "No Results" for every single doc number regardless of
+    # type or age, which is why this fallback had a 100% failure rate. The
+    # real mechanism (found in the "Single Document Numbers" Advanced
+    # Search field) is searchType=advancedSearch with documentNumberRange
+    # as a JSON array. Verified working end-to-end against a real doc
+    # (2026026641, DFLC INC -> BLACK ROBERT E) -- exact 1-result match,
+    # doc_number itself was never wrong here (unlike the analogous bug on
+    # Bexar), only the search URL was.
+    doc_json = urllib.parse.quote(f'["{doc_number}"]')
     url = (
         f"{PUBLICSEARCH_BASE}/results"
         f"?department={department}"
-        f"&keywordSearch=false"
+        f"&documentNumberRange={doc_json}"
         f"&recordedDateRange=18000101%2C{today_str}"
-        f"&searchOcrText=false"
-        f"&searchType=quickSearch"
-        f"&searchValue={urllib.parse.quote(str(doc_number))}"
+        f"&searchType=advancedSearch"
     )
     try:
         driver.get(url)
@@ -364,8 +395,13 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=20):
         )
         time.sleep(1)
 
-        row = driver.find_element(By.CSS_SELECTOR, "table tbody tr")
-        row.click()
+        # v1.4: row.click() on the <tr> itself doesn't trigger the site's
+        # row-navigation handler -- confirmed the row only navigates when a
+        # data cell (td.col-3, first real column after the checkbox/icon
+        # columns) is clicked directly, same pattern already used elsewhere
+        # in this file for the main chunk-scrape table.
+        cell = driver.find_element(By.CSS_SELECTOR, "td.col-3")
+        cell.click()
         WebDriverWait(driver, timeout).until(EC.url_contains("/doc/"))
         time.sleep(1.5)
 
