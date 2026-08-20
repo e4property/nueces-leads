@@ -302,9 +302,29 @@ def get_driver():
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--disable-gpu")
     opts.add_argument("--window-size=1280,900")
-    opts.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
+    # 2026-08-20: the old UA string was truncated -- "...AppleWebKit/537.36"
+    # with nothing after it, which no real browser ever sends. Confirmed
+    # live: fetch_address_by_docnumber()'s exact URL+click flow works
+    # perfectly in an interactive browser but fails 100% of the time in
+    # this headless session (same doc, same URL, same click target) --
+    # strong sign the site is treating this session differently, and a
+    # UA that's an obvious automation tell is the most likely reason.
+    # Using a complete, current, realistic Chrome UA plus the standard
+    # navigator.webdriver-hiding flags instead.
+    opts.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+    )
+    opts.add_argument("--disable-blink-features=AutomationControlled")
+    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+    opts.add_experimental_option("useAutomationExtension", False)
     svc = Service(ChromeDriverManager().install())
-    return webdriver.Chrome(service=svc, options=opts)
+    driver = webdriver.Chrome(service=svc, options=opts)
+    driver.execute_cdp_cmd(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"},
+    )
+    return driver
 
 # ── Doc-page address fallback (v1.2 — click-through) ──────────────────────────
 # Matches a header line like "2522 WIDGEON DR CORPUS CHRISTI TX 78410"
@@ -388,13 +408,31 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=20):
         f"&recordedDateRange=18000101%2C{today_str}"
         f"&searchType=advancedSearch"
     )
+    # v1.5 diagnostics: the v1.4 fix was verified end-to-end in an
+    # interactive browser but still failed 100% of the time in the actual
+    # headless GitHub Actions run -- same URL, same doc, same click target.
+    # Splitting this into separately-caught stages so the next real run's
+    # log says exactly which step failed (page load? table never appeared?
+    # click didn't navigate?) instead of one blank "Message: " for the
+    # whole function, which told us nothing about where it was actually
+    # breaking.
     try:
         driver.get(url)
+    except Exception as e:
+        log.warning(f"  docnumber-fallback [{doc_number}]: page load failed: {e}")
+        return None, None, None
+
+    try:
         WebDriverWait(driver, timeout).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table tr td"))
         )
-        time.sleep(1)
+    except Exception as e:
+        log.warning(f"  docnumber-fallback [{doc_number}]: results table never appeared "
+                    f"(url={driver.current_url!r}, title={driver.title!r}): {e}")
+        return None, None, None
+    time.sleep(1)
 
+    try:
         # v1.4: row.click() on the <tr> itself doesn't trigger the site's
         # row-navigation handler -- confirmed the row only navigates when a
         # data cell (td.col-3, first real column after the checkbox/icon
@@ -403,14 +441,13 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=20):
         cell = driver.find_element(By.CSS_SELECTOR, "td.col-3")
         cell.click()
         WebDriverWait(driver, timeout).until(EC.url_contains("/doc/"))
-        time.sleep(1.5)
-
-        return _parse_address_from_current_page(driver, doc_number)
-
     except Exception as e:
-        log.warning(f"  docnumber-fallback failed for doc {doc_number} (dept={department}): {e}")
+        log.warning(f"  docnumber-fallback [{doc_number}]: click-through to /doc/ failed "
+                    f"(url={driver.current_url!r}): {e}")
+        return None, None, None
+    time.sleep(1.5)
 
-    return None, None, None
+    return _parse_address_from_current_page(driver, doc_number)
 
 # ── Appraisal Roll Lookup ─────────────────────────────────────────────────────
 def normalize_owner(s):
