@@ -873,6 +873,12 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
                     month, year = parts[0], parts[2]
 
             # Grantor = owner (first non-entity name candidate)
+            # 2026-08-21: added the LOT/BLOCK/SECTION/etc exclusion -- legal
+            # description cells ("Padre Island Corpus Christi Ports O Call-
+            # Lot 4, Block 10") weren't excluded here, so one could slip
+            # through and get assigned as "owner" since it doesn't match any
+            # ENTITY_FILTER_KW keyword either. Same regex already used below
+            # to capture the `legal` variable.
             name_candidates = [
                 c for c in cells
                 if len(c) > 4
@@ -884,6 +890,7 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
                 and "NOTICE" not in c.upper()
                 and "APPOINTMENT" not in c.upper()
                 and "FORECLOSURE" not in c.upper()
+                and not re.search(r"\b(LOT|BLOCK|SECTION|SUBDIVISION|SUBD|TRACT|ABSTRACT)\b", c, re.IGNORECASE)
             ]
 
             grantor = ""
@@ -891,8 +898,15 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
                 if not is_entity_name(cand):
                     grantor = cand
                     break
-            if not grantor and name_candidates:
-                grantor = name_candidates[0]
+            # 2026-08-21: removed the "first candidate as last resort" fallback
+            # that used to run here. On APPT docs (Appointment of Substitute
+            # Trustee), grantor/grantee are the lender and the substitute
+            # trustee company -- there's no borrower name on the document at
+            # all -- so when every name candidate is an entity, that fallback
+            # was silently assigning the lender's name (e.g. "Rocket Mortgage
+            # Llc", "Lakeview Loan Servicing Llc") as the owner. Leaving owner
+            # blank here lets enrich_from_lookup() below fill it in from the
+            # county tax roll instead, which has the real owner.
 
             # Lender = first entity name
             lender = ""
