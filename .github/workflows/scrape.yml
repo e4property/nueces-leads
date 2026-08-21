@@ -30,7 +30,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests beautifulsoup4 lxml selenium webdriver-manager
+        run: pip install requests beautifulsoup4 lxml selenium webdriver-manager homeharvest
 
       - name: Run Nueces scraper
         run: python scraper/fetch.py 2>&1 | tee /tmp/nueces.log
