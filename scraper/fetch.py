@@ -119,6 +119,10 @@ RECORDS_PATH      = Path("dashboard/records.json")
 LOOKUP_PATH       = Path("scraper/nueces_lookup.csv.gz")
 SCRAPE_DAYS       = 365   # extended for initial Nueces catchup        # rolling window
 AGED_DAYS         = 60        # leads older than this = aged
+ON_MARKET_STATUSES      = {"FOR_SALE", "PENDING", "FOR_RENT"}
+ON_MARKET_FETCH_LIMIT   = 30   # max never-checked leads to look up per run
+ON_MARKET_REFRESH_DAYS  = 7    # re-check a lead's market status at most this often
+ON_MARKET_REFRESH_LIMIT = 30   # max already-checked leads to re-check per run
 TODAY             = datetime.now(timezone.utc)
 TODAY_NAIVE       = datetime.now()
 
@@ -1107,6 +1111,90 @@ def dedup(existing, new_recs):
     log.info(f"Dedup: {added} new, {len(seen)-added} existing")
     return list(seen.values())
 
+
+# ── On-market status (HomeHarvest / Realtor.com) ──────────────────────────────
+def fetch_on_market_status(records):
+    """
+    Flags leads that are already listed for sale/rent elsewhere, using
+    homeharvest (pip, MIT license) against Realtor.com's public page data —
+    no API key, no cost. Same approach as bexar-leads' ARV lookup, but only
+    pulls the `status` field here since Nueces doesn't have an ARV feature
+    to piggyback on.
+
+    Soft dependency: any failure (network, no match, library error) just
+    leaves on_market unset for that lead rather than breaking the run.
+    Two passes: never-checked leads first (ON_MARKET_FETCH_LIMIT), then a
+    refresh of already-checked leads older than ON_MARKET_REFRESH_DAYS
+    (ON_MARKET_REFRESH_LIMIT) — a lead can get listed by someone else weeks
+    after we first looked, so a one-time check isn't enough.
+    """
+    import pandas as pd
+    from homeharvest import scrape_property
+
+    def clean(val):
+        if val is None or pd.isna(val):
+            return None
+        s = str(val).strip()
+        return None if s in ("", "nan", "<NA>", "None") else val
+
+    cutoff = datetime.now() - timedelta(days=ON_MARKET_REFRESH_DAYS)
+
+    def needs_check(r):
+        if not r.get("address"):
+            return False
+        checked_at = r.get("on_market_checked_at")
+        if not checked_at:
+            return True
+        try:
+            return datetime.strptime(checked_at, "%Y-%m-%dT%H:%M:%SZ") < cutoff
+        except Exception:
+            return True
+
+    never_checked = [r for r in records if r.get("address") and not r.get("on_market_checked_at")]
+    stale_checked = [r for r in records if r.get("address") and r.get("on_market_checked_at") and needs_check(r)]
+
+    candidates = never_checked[:ON_MARKET_FETCH_LIMIT] + stale_checked[:ON_MARKET_REFRESH_LIMIT]
+
+    if not candidates:
+        log.info("On-market: no eligible leads — skipping")
+        return records
+
+    log.info(f"On-market: {len(never_checked[:ON_MARKET_FETCH_LIMIT])} new + "
+             f"{len(stale_checked[:ON_MARKET_REFRESH_LIMIT])} refresh "
+             f"(caps={ON_MARKET_FETCH_LIMIT}/{ON_MARKET_REFRESH_LIMIT})")
+    changed = 0
+    errors  = 0
+
+    for rec in candidates:
+        full_addr = f"{rec['address']}, {rec.get('city', '')}, TX {rec.get('zip', '')}".strip(", ")
+        try:
+            df = scrape_property(location=full_addr)
+            now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            was_on_market = bool(rec.get("on_market"))
+
+            if df is None or len(df) == 0:
+                rec["on_market_checked_at"] = now_iso
+                continue
+
+            status = clean(df.iloc[0].get("status")) or ""
+            rec["on_market"]            = status in ON_MARKET_STATUSES
+            rec["on_market_status"]     = status
+            rec["on_market_checked_at"] = now_iso
+
+            if rec["on_market"] != was_on_market:
+                changed += 1
+                log.info(f"  On-market [{rec.get('doc_number')}] {full_addr}: "
+                         f"{was_on_market} -> {rec['on_market']} (status={status})")
+        except Exception as e:
+            log.warning(f"  On-market [{rec.get('doc_number')}] {full_addr}: error: {e}")
+            errors += 1
+        finally:
+            time.sleep(1)
+
+    log.info(f"On-market: {changed} status changes, {errors} errors out of {len(candidates)} candidates")
+    return records
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     run_ts = TODAY.isoformat()
@@ -1273,6 +1361,12 @@ def main():
         or filed_within_window(r.get("date_filed", "") or r.get("opened_date", ""), SCRAPE_DAYS)
     ]
     log.info(f"90-day filter: {before_filter} → {len(all_records)}")
+
+    # ── On-market status ──────────────────────────────────────────────────────
+    try:
+        all_records = fetch_on_market_status(all_records)
+    except Exception as e:
+        log.warning(f"On-market status error: {e}")
 
     # ── Rescore all ───────────────────────────────────────────────────────────
     for rec in all_records:
