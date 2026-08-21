@@ -372,7 +372,7 @@ def _parse_address_from_current_page(driver, doc_number):
 DEPT_BY_TYPE = {"NOF": "FC", "TAX": "FC", "APPT": "RP"}
 
 
-def fetch_address_by_docnumber(driver, doc_number, department, timeout=20):
+def fetch_address_by_docnumber(driver, doc_number, department, timeout=40):
     """
     v1.3: address fallback for the BACKLOG, not just this run's new leads.
     fetch_address_by_click() only works when source_url is still in memory
@@ -420,6 +420,24 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=20):
         driver.get(url)
     except Exception as e:
         log.warning(f"  docnumber-fallback [{doc_number}]: page load failed: {e}")
+        return None, None, None
+
+    # v1.5: confirmed via the diagnostics above that the page gets stuck on
+    # title="Loading Search Results..." well past the old 20s timeout in
+    # headless CI, despite the identical URL rendering instantly in an
+    # interactive browser -- this results page is heavier to hydrate than
+    # the main chunk-scrape's listing page (same site, different search
+    # type), and headless Chrome on a shared CI runner is measurably slower.
+    # Waiting for the title to move off the loading state first, THEN for
+    # the table, gives a clearer failure signal than one combined wait and
+    # more total time for a page that's just slow, not broken.
+    try:
+        WebDriverWait(driver, timeout).until(
+            lambda d: d.title != "Loading Search Results..."
+        )
+    except Exception as e:
+        log.warning(f"  docnumber-fallback [{doc_number}]: page never left loading state "
+                    f"(url={driver.current_url!r}, title={driver.title!r}): {e}")
         return None, None, None
 
     try:
