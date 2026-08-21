@@ -422,30 +422,13 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40):
         log.warning(f"  docnumber-fallback [{doc_number}]: page load failed: {e}")
         return None, None, None
 
-    # v1.5: confirmed via the diagnostics above that the page gets stuck on
-    # title="Loading Search Results..." well past the old 20s timeout in
-    # headless CI, despite the identical URL rendering instantly in an
-    # interactive browser -- this results page is heavier to hydrate than
-    # the main chunk-scrape's listing page (same site, different search
-    # type), and headless Chrome on a shared CI runner is measurably slower.
-    # Waiting for the title to move off the loading state first, THEN for
-    # the table, gives a clearer failure signal than one combined wait and
-    # more total time for a page that's just slow, not broken.
-    try:
-        WebDriverWait(driver, timeout).until(
-            lambda d: d.title != "Loading Search Results..."
-        )
-    except Exception as e:
-        log.warning(f"  docnumber-fallback [{doc_number}]: page never left loading state "
-                    f"(url={driver.current_url!r}, title={driver.title!r}): {e}")
-        try:
-            src = driver.page_source
-            log.warning(f"  docnumber-fallback [{doc_number}]: page_source len={len(src)} "
-                        f"snippet={src[:800]!r}")
-        except Exception as e2:
-            log.warning(f"  docnumber-fallback [{doc_number}]: could not read page_source: {e2}")
-        return None, None, None
-
+    # v1.6: the v1.5 title-based gate was wrong. The page_source dumped on
+    # that failure was a fully hydrated 100KB+ React page with GTM/analytics
+    # scripts loaded -- not a stuck loading shell. document.title just never
+    # updates in headless mode (likely a visibility/focus-gated title effect
+    # in the SPA), so gating on it timed out 100% of the time even when the
+    # real results were already in the DOM. Wait on the table directly
+    # instead -- that's the thing we actually need.
     try:
         WebDriverWait(driver, timeout).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table tr td"))
@@ -453,6 +436,12 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40):
     except Exception as e:
         log.warning(f"  docnumber-fallback [{doc_number}]: results table never appeared "
                     f"(url={driver.current_url!r}, title={driver.title!r}): {e}")
+        try:
+            src = driver.page_source
+            log.warning(f"  docnumber-fallback [{doc_number}]: page_source len={len(src)} "
+                        f"snippet={src[:800]!r}")
+        except Exception as e2:
+            log.warning(f"  docnumber-fallback [{doc_number}]: could not read page_source: {e2}")
         return None, None, None
     time.sleep(1)
 
