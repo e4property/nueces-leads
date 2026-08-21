@@ -120,9 +120,13 @@ LOOKUP_PATH       = Path("scraper/nueces_lookup.csv.gz")
 SCRAPE_DAYS       = 365   # extended for initial Nueces catchup        # rolling window
 AGED_DAYS         = 60        # leads older than this = aged
 ON_MARKET_STATUSES      = {"FOR_SALE", "PENDING", "FOR_RENT"}
-ON_MARKET_FETCH_LIMIT   = 30   # max never-checked leads to look up per run
+# 2026-08-21: bexar-leads hit a hard Realtor.com AuthenticationError wall
+# after ~27 consecutive homeharvest requests in one run that never
+# recovered. Keeping the combined per-run total (fetch + refresh) well
+# under that.
+ON_MARKET_FETCH_LIMIT   = 20   # max never-checked leads to look up per run
 ON_MARKET_REFRESH_DAYS  = 7    # re-check a lead's market status at most this often
-ON_MARKET_REFRESH_LIMIT = 30   # max already-checked leads to re-check per run
+ON_MARKET_REFRESH_LIMIT = 10   # max already-checked leads to re-check per run
 TODAY             = datetime.now(timezone.utc)
 TODAY_NAIVE       = datetime.now()
 
