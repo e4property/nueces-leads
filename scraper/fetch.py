@@ -438,6 +438,12 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40):
     except Exception as e:
         log.warning(f"  docnumber-fallback [{doc_number}]: page never left loading state "
                     f"(url={driver.current_url!r}, title={driver.title!r}): {e}")
+        try:
+            src = driver.page_source
+            log.warning(f"  docnumber-fallback [{doc_number}]: page_source len={len(src)} "
+                        f"snippet={src[:800]!r}")
+        except Exception as e2:
+            log.warning(f"  docnumber-fallback [{doc_number}]: could not read page_source: {e2}")
         return None, None, None
 
     try:
