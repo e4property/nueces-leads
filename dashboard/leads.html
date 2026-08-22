@@ -1267,7 +1267,7 @@ document.getElementById('timeline').innerHTML=ev.reverse().map(e=>`<div class="t
 async function writeBackToRepo(doc_number,updates){if(!S.ghToken)return;try{const repoPath='dashboard/records.json';const apiBase=`https://api.github.com/repos/${GH_REPO}/contents/${repoPath}`;const getRes=await fetch(apiBase,{headers:{'Authorization':'Bearer '+S.ghToken,'Accept':'application/vnd.github+json'}});if(!getRes.ok)return;const fileData=await getRes.json();const sha=fileData.sha;const currentJson=JSON.parse(atob(fileData.content.replace(/\n/g,'')));let changed=false;for(const rec of currentJson){if(rec.doc_number===doc_number){Object.assign(rec,updates);changed=true;break;}}if(!changed)return;const newContent=btoa(unescape(encodeURIComponent(JSON.stringify(currentJson))));await fetch(apiBase,{method:'PUT',headers:{'Authorization':'Bearer '+S.ghToken,'Accept':'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify({message:`dash: update lead ${doc_number}`,content:newContent,sha:sha})});}catch(e){console.warn('writeBackToRepo:',e);}}
 
 async function savePhone(){
-  if(S.used>=100){toast('Weekly budget exhausted',true);return;}
+  if(S.used>=100){toast('ForeWarn budget at 100 — counter only, continuing','ok');}
   const phone=document.getElementById('phone-input').value.trim();
   if(!phone){toast('Enter a phone number',true);return;}
   const lead=allLeads.find(l=>l.doc_number===selectedDoc);if(!lead)return;
