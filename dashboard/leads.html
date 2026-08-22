@@ -1471,6 +1471,10 @@ async function pushGHL(lead,phone){
       toast(`Blocked push — this lead's owner name looks like a placeholder ("${(lead.owner||'').slice(0,60)}"), not a real name. Look up the real owner (county appraisal district) and enter it in the First/Last fields before pushing.`,true);
       return null;
     }
+    if(lead.on_market){
+      toast(`Blocked push — this lead is already on market${lead.on_market_status?' ('+lead.on_market_status+')':''}. Not sending SMS to on-market leads right now.`,true);
+      return null;
+    }
     const vbp=isVBP(lead),stacked=isStacked(lead),ce=isCEOnly(lead),lp=isLP(lead),appt=isAppt(lead);const ghlTag=getGHLTag(lead);
   // v4.2 fix: APPT leads must NOT get nueces_lead tag — it triggers wrong workflow
   const baseTags=appt?['forewarn_searched']:['nueces_lead','forewarn_searched'];
