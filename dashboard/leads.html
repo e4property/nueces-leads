@@ -1475,7 +1475,7 @@ async function pushGHL(lead,phone){
   // v4.2 fix: APPT leads must NOT get nueces_lead tag — it triggers wrong workflow
   const baseTags=appt?['forewarn_searched']:['nueces_lead','forewarn_searched'];
   const tags=[...baseTags,ghlTag];
-  if(stacked){tags.push('nueces_stacked','nueces_vbp','nueces_ce');if(isVBPDangerous(lead))tags.push('ce_dangerous');}else if(vbp)tags.push('nueces_vbp');else if(ce){tags.push('nueces_ce');if(lead.flags?.includes('DANGEROUS PREMISES'))tags.push('ce_dangerous');}else if(lp)tags.push('nueces_lp');else if(appt){/* nueces_prefore already added via ghlTag above */}else{tags.push('nueces-contacted');if(lead.absentee)tags.push('absentee');if(lead.type==='TAX')tags.push('tax_foreclosure');if(lead.is_new)tags.push('new_lead');}if(isLongHeld(lead))tags.push('long_held');
+  if(stacked){tags.push('nueces_stacked','nueces_vbp','nueces_ce');if(isVBPDangerous(lead))tags.push('ce_dangerous');}else if(vbp)tags.push('nueces_vbp');else if(ce){tags.push('nueces_ce');if(lead.flags?.includes('DANGEROUS PREMISES'))tags.push('ce_dangerous');}else if(lp)tags.push('nueces_lp');else if(appt){/* nueces_prefore already added via ghlTag above */}else{tags.push('nueces-contacted');if(lead.absentee)tags.push('absentee');if(lead.type==='TAX')tags.push('tax_foreclosure');if(lead.is_new)tags.push('new_lead');}if(isLongHeld(lead))tags.push('long_held');if(lead.tenure_years!=null&&lead.tenure_years<=4)tags.push('low_tenure_lead');
   // Bot-offer bracket, ported from bexar-leads 2026-08-20: primary path is
   // marking a lead (mao-mark-offer checkbox, only shown pre-push) BEFORE
   // pushing -- if marked, the range computed from the currently-open lead's
