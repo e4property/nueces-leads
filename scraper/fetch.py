@@ -472,10 +472,22 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=
     # in the SPA), so gating on it timed out 100% of the time even when the
     # real results were already in the DOM. Wait on the table directly
     # instead -- that's the thing we actually need.
+    # v1.9: that still didn't explain persistent timeouts even after v1.7's
+    # date fix -- live-verified 2026-08-23 in an interactive (non-headless)
+    # session that a genuine "No Results Found" page renders its own <h1>
+    # with NO stable class (React CSS-in-JS hash like "css-z524vz", changes
+    # per build), so it never matched a class-based no-results selector and
+    # the wait spun for the FULL timeout on every zero-match lookup instead
+    # of failing fast. XPath text match catches it regardless of class.
     try:
         WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "table tr td"))
+            EC.presence_of_element_located(
+                (By.XPATH, "//table//tr/td | //h1[contains(text(),'No Results')]")
+            )
         )
+        if driver.find_elements(By.XPATH, "//h1[contains(text(),'No Results')]"):
+            log.info(f"  docnumber-fallback [{doc_number}]: no results for this doc number")
+            return None, None, None
     except Exception as e:
         log.warning(f"  docnumber-fallback [{doc_number}]: results table never appeared "
                     f"(url={driver.current_url!r}, title={driver.title!r}): {e}")
@@ -846,9 +858,16 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
 
         try:
             driver.get(url)
+            # v1.9: the .no-results/[class*='no-result'] selector never
+            # matched anything -- live-verified 2026-08-23 that a genuine
+            # "No Results Found" page renders an <h1> with a React CSS-in-JS
+            # hashed class (e.g. "css-z524vz"), not a stable "no-result"
+            # class name. That's why this wait timed out on EVERY zero-match
+            # search instead of the "no results" check below ever running --
+            # not a bot-detection or headless-only issue as it first looked.
             WebDriverWait(driver, 30).until(
                 EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "table tr td, .no-results, [class*='no-result']")
+                    (By.XPATH, "//table//tr/td | //h1[contains(text(),'No Results')]")
                 )
             )
             time.sleep(2)
