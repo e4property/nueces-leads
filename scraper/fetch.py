@@ -813,7 +813,16 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
     new_records = []
     window = days if days is not None else SCRAPE_DAYS
     cutoff = (TODAY - timedelta(days=window)).strftime("%Y%m%d")
-    today_str = TODAY.strftime("%Y%m%d")
+    # v1.7: end date capped 3 days behind real today -- same bug and fix as
+    # fetch_address_by_docnumber (see its v1.7 note). recordedDateRange's end
+    # date can't exceed the site's own "Certified through" date (runs ~1-2
+    # days behind real today) or the search returns "No Results Found" no
+    # matter what's actually in range. This was silently zeroing out every
+    # scrape (NOF/TAX/APPT all showing "0 new records" since at least
+    # 2026-08-21, confirmed by comparing that run's log to this one) --
+    # the results table never rendered because the query itself was
+    # malformed, not because of a real timeout or bot-detection issue.
+    today_str = (TODAY - timedelta(days=3)).strftime("%Y%m%d")
     offset = 0
     consecutive_empty = 0
 
