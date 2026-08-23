@@ -853,7 +853,20 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
             )
             time.sleep(2)
         except Exception as e:
-            log.warning(f"  Timeout offset={offset}: {e}")
+            # v1.8: dump what's actually on the page when this times out --
+            # every prior "Timeout offset=X" log has been a blank "Message: "
+            # with no way to tell whether it's a slow real page, a genuine
+            # "No Results" state that just doesn't match either selector, or
+            # a bot-challenge interstitial (Cloudflare etc.) that headless
+            # Chrome hits but an interactive session doesn't. Same diagnostic
+            # pattern already proven useful on fetch_address_by_docnumber.
+            try:
+                src = driver.page_source
+                log.warning(f"  Timeout offset={offset} (url={driver.current_url!r}, "
+                            f"title={driver.title!r}): {e} | page_source len={len(src)} "
+                            f"snippet={src[:600]!r}")
+            except Exception as e2:
+                log.warning(f"  Timeout offset={offset}: {e} | could not read page_source: {e2}")
             consecutive_empty += 1
             if consecutive_empty >= 3:
                 break
