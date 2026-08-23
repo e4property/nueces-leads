@@ -8,6 +8,24 @@ Enrichment: Nueces CAD appraisal roll lookup CSV (legal desc → address/owner/v
 GHL tags: nueces_lead, nueces_prefore, nueces_ce
 Scrape schedule: Mon/Thu 9am + 3pm CST (14:00 + 20:00 UTC)
 
+v1.7 changes (Deed of Trust hop for APPT address gap, closes the v1.4 TODO):
+  - Live-verified 2026-08-23: an APPT doc's "Marginal References" section
+    lists the Deed of Trust it's tied to (e.g. "Instrument Number: 2024012324
+    DEED OF TRUST 4/15/2024"), filed in the SAME department (RP) as the
+    APPT itself. Hopping to that doc number via the same
+    advancedSearch/documentNumberRange mechanism and re-parsing the page
+    for a Property Address closes the gap -- same pattern as Bexar's
+    Notice -> Deed of Trust OCR chain, but no OCR needed here since this
+    site's doc pages expose real DOM text.
+  - Also found live 2026-08-23, separate from the above: recordedDateRange's
+    end date must not exceed the site's own "Certified through" date (runs
+    ~2 days behind real today) or the search returns "No Results Found"
+    even for a document that unambiguously exists and falls well inside the
+    range -- confirmed by bisecting a known-good doc (2024012324) between
+    end=today (fails) and end=today-2d (succeeds), identical query
+    otherwise. fetch_address_by_docnumber's single-doc lookups now use a
+    3-day safety buffer on the end date instead of TODAY exactly.
+
 v1.4 changes (fixed the actual search mechanism, not just its scope):
   - v1.3's fetch_address_by_docnumber() still had a 100% failure rate even
     after covering the full backlog -- confirmed live 2026-08-20 via the
@@ -340,6 +358,13 @@ DOC_ADDR_LABEL_RE = re.compile(r"Property\s*Address[:\s]*([0-9][^<\n]{5,90})", r
 DOC_ADDR_GENERIC_RE = re.compile(
     r"(\d{1,6}\s+[A-Z0-9.\-\/ ]{3,40}?)\s+([A-Z][A-Z .]{2,25}?)\s+TX\s+(\d{5})"
 )
+# Matches a Marginal References entry like "Instrument Number: 2024012324
+# DEED OF TRUST 4/15/2024" (whitespace-normalized page text) -- used to hop
+# from an APPT doc (no address field) to the Deed of Trust it references,
+# which does have one.
+DEED_OF_TRUST_REF_RE = re.compile(
+    r"Instrument\s+Number:\s*(\d+)\s+DEED\s+OF\s+TRUST", re.IGNORECASE
+)
 
 def _parse_address_from_current_page(driver, doc_number):
     """
@@ -380,7 +405,7 @@ def _parse_address_from_current_page(driver, doc_number):
 DEPT_BY_TYPE = {"NOF": "FC", "TAX": "FC", "APPT": "RP"}
 
 
-def fetch_address_by_docnumber(driver, doc_number, department, timeout=40):
+def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=False):
     """
     v1.3: address fallback for the BACKLOG, not just this run's new leads.
     fetch_address_by_click() only works when source_url is still in memory
@@ -392,11 +417,21 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40):
     so it works for ANY doc number regardless of type or when it was first
     scraped -- same fix pattern already proven on the Bexar scraper's
     goto_doc_by_docnumber() for the analogous loan_amount backlog problem.
+
+    v1.7: _hop=True marks this call as the recursive Deed-of-Trust follow-up
+    (see below) so it can't chain a second time even if that doc also has a
+    Marginal Reference of its own -- one hop only.
     Returns (street, city, zip) or (None, None, None).
     """
     if not doc_number:
         return None, None, None
-    today_str = TODAY.strftime("%Y%m%d")
+    # v1.7: end date capped 3 days behind real today -- confirmed live
+    # 2026-08-23 that recordedDateRange's end date must not exceed the
+    # site's own "Certified through" date (runs ~1-2 days behind real
+    # today) or the search returns "No Results Found" even for a document
+    # that unambiguously exists inside the range. Costs nothing here since
+    # every doc being looked up this way was already recorded in the past.
+    today_str = (TODAY - timedelta(days=3)).strftime("%Y%m%d")
     # v1.4: was searchType=quickSearch&searchValue={doc_number} -- confirmed
     # live 2026-08-20 via the site's own Advanced Search UI that quickSearch
     # is a keyword/party-name search, NOT an exact document-number lookup;
@@ -468,7 +503,24 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40):
         return None, None, None
     time.sleep(1.5)
 
-    return _parse_address_from_current_page(driver, doc_number)
+    result = _parse_address_from_current_page(driver, doc_number)
+    if result != (None, None, None) or _hop:
+        return result
+
+    # v1.7: APPT docs genuinely have no Property Address field of their own
+    # (TX law doesn't require it for this doc type) -- fall back to the
+    # Deed of Trust it references via Marginal References, which does.
+    # Confirmed live 2026-08-23 the referenced doc sits in the same
+    # department as the APPT itself.
+    text_plain = re.sub(r"<[^>]+>", " ", driver.page_source)
+    text_plain = re.sub(r"\s+", " ", text_plain)
+    m = DEED_OF_TRUST_REF_RE.search(text_plain)
+    if not m:
+        return None, None, None
+    dot_doc_number = m.group(1)
+    log.info(f"  docnumber-fallback [{doc_number}]: no address on APPT page — "
+             f"hopping to referenced Deed of Trust {dot_doc_number}")
+    return fetch_address_by_docnumber(driver, dot_doc_number, department, timeout, _hop=True)
 
 # ── Appraisal Roll Lookup ─────────────────────────────────────────────────────
 def normalize_owner(s):
