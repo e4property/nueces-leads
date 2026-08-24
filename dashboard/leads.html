@@ -1132,11 +1132,12 @@ function renderItem(lead,idx){
   else{if(lead.absentee)b.push(`<span class="badge b-abs">ABS</span>`);b.push(lead.type==='TAX'?`<span class="badge b-tax">TAX</span>`:`<span class="badge b-nof">NOF</span>`);}
   if(isLongHeld(lead))b.push(`<span class="badge b-longheld">LONG HELD</span>`);
   if(lead.on_market)b.push(`<span class="badge" style="background:var(--amber-bg);color:var(--amber-dk);border:1px solid var(--amber-mid)">🏷️ ON MARKET</span>`);
+  if(lead.owner_is_entity)b.push(`<span class="badge" style="background:var(--red-bg);color:var(--red-dk);border:1px solid var(--red-mid)" title="No borrower name on file — the name shown is the lender/servicer/trustee firm, not a person">⚠️ NO BORROWER</span>`);
   if(ls.ghl_pushed)b.push(`<span class="badge b-ghl">GHL✓</span>`);
   if(ls.phone)b.push(`<span class="b-phone">📞</span>`);
   if(dispo!=='new'&&dispo!=='contacted')b.push(`<span class="badge" style="background:var(--purple-bg);color:var(--purple-dk);border:1px solid var(--purple-mid)">${dispo}</span>`);
   const sc=lead.score>=8?'s10':lead.score>=6?'s8':lead.score>=4?'s6':'low';
-  const displayName=stacked?(lead.owner||'Vacant+CE'):vbp&&!lead.owner?'Vacant Property':ce&&!lead.owner?(lead.ce_cat_label||'CE Violation'):lp&&!lead.owner?'Lis Pendens':(lead.owner||'—');
+  const displayName=stacked?(lead.owner||'Vacant+CE'):vbp&&!lead.owner?'Vacant Property':ce&&!lead.owner?(lead.ce_cat_label||'CE Violation'):lp&&!lead.owner?'Lis Pendens':(lead.owner||(lead.owner_is_entity&&lead.lender?`No borrower name (${lead.lender})`:'—'));
   const d=lead.days_until_sale;const dateCls=d!=null&&d<=14?'urg':d!=null&&d<=30?'soon':'ok';const dateStr=d!=null&&!auctionPassed(lead)?`${d}d`:'';
   const eq=getEquity(lead);const eqStr=eq?'$'+Math.round(Math.abs(eq.equity)/1000)+'k':'';
   const age=daysAgo(lead);const ageCls=age<=14?'fresh':age<=60?'mid':'old';const ageStr=age<999?(age===0?'today':age+'d ago'):'';
