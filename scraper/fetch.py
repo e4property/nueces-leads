@@ -935,6 +935,7 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
 
         rows = re.findall(r"<tr[^>]*>(.*?)</tr>", src, re.DOTALL | re.IGNORECASE)
         page_recs = []
+        data_row_count = 0  # v2.1: counted independent of known_docs -- see break condition below
 
         for row in rows:
             if re.search(r"<th|thead|DOC.TYPE|RECORDED|GRANTOR|GRANTEE|PROPERTY", row, re.IGNORECASE):
@@ -946,7 +947,10 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
                 continue
 
             doc_num = next((c for c in cells if re.match(r"^\d{7,10}$", c.strip())), "")
-            if not doc_num or doc_num in known_docs:
+            if not doc_num:
+                continue
+            data_row_count += 1
+            if doc_num in known_docs:
                 continue
 
             # Nueces FC results include PROPERTY ADDRESS column
@@ -1064,18 +1068,28 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
 
             page_recs.append(rec)
 
-        log.info(f"  offset={offset} | {len(page_recs)} new on page")
+        log.info(f"  offset={offset} | {len(page_recs)} new on page ({data_row_count} total rows)")
 
         for rec in page_recs:
             known_docs.add(rec["doc_number"])
             new_records.append(rec)
 
-        if len(page_recs) == 0:
+        # v2.1: was gating on len(page_recs) (post known_docs filter), which
+        # broke pagination the moment a single already-known doc appeared on
+        # a page -- e.g. a 50-row page with 49 new + 1 known looked like "49
+        # < 50, must be the last page" and stopped, even though 694 total
+        # records existed for the query and offset=50+ was never fetched.
+        # Confirmed live 2026-08-25 on the first real run after the v2.0
+        # mechanism fix: NOF page 1 returned exactly this (49 new, 1 known)
+        # and silently gave up instead of continuing into the backlog.
+        # Gate on the raw row count instead -- a full 50-row page always
+        # means more pages may exist, regardless of how many were new.
+        if data_row_count == 0:
             consecutive_empty += 1
         else:
             consecutive_empty = 0
 
-        if consecutive_empty >= 2 or 0 < len(page_recs) < 50:
+        if consecutive_empty >= 2 or 0 < data_row_count < 50:
             break
 
         offset += 50
