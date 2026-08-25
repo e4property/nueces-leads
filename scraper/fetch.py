@@ -814,46 +814,77 @@ def new_record(doc_number, lead_type, source="publicsearch", run_ts=None):
         "ghl_id":           "",
     }
 
-def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, run_ts, days=None):
+def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=None, doc_types=None):
     """
     Generic PublicSearch scraper for Nueces County.
     department: 'FC' (foreclosures) or 'RP' (real property)
-    search_term: e.g. 'NOTICE' or 'APPOINTMENT'
+    doc_types: docTypes code (e.g. 'APPNMT' for Appointment of Substitute
+               Trustee) -- required for RP, ignored for FC.
     days: optional lookback window override (defaults to SCRAPE_DAYS).
           Used by backfill_30d.py to re-pull a shorter recent window.
+
+    v2.0: replaced quickSearch+searchValue entirely. Live-verified
+    2026-08-25 via the site's own Advanced Search UI that quickSearch's
+    free-text searchValue never matches anything under a document-type-
+    scoped department -- confirmed for "TAX", "APPOINTMENT", and even a
+    generic keyword like "SMITH" under department=FC (quickSearch only
+    works against the broad, unfiltered department listing, e.g. plain
+    department=RP with no other filters). This is the actual reason
+    NOF/TAX/APPT all showed "0 new records" every run since at least
+    2026-08-21 even after the v1.7 date-range fix and v1.9 wait-selector
+    fix landed -- both were real bugs, but the query mechanism itself was
+    also wrong underneath them.
+
+    Real mechanism per department, confirmed via the Advanced Search UI:
+      - FC (Foreclosures): plain listing, searchType=advancedSearch, NO
+        searchValue, instrumentDateRange (not recordedDateRange -- this
+        field has no "Certified through" lag; a working query used an end
+        date a month past today). Table has no GRANTOR/GRANTEE at all
+        (Doc Type / Recorded / Sale Date / Doc# / legal description
+        mislabeled "Property Address" in the header) -- owner comes from
+        enrich_from_lookup() by legal description below, not this listing.
+      - RP (Land Records) needs docTypes=<code> as its own param (e.g.
+        APPNMT for Appointment of Substitute Trustee) plus
+        searchType=advancedSearch and recordedDateRange (3-day-buffered,
+        same v1.7 fix). This table has the full GRANTOR/GRANTEE/LEGAL
+        DESCRIPTION/LOT/BLOCK structure the parsing below already expects.
     """
     new_records = []
     window = days if days is not None else SCRAPE_DAYS
     cutoff = (TODAY - timedelta(days=window)).strftime("%Y%m%d")
-    # v1.7: end date capped 3 days behind real today -- same bug and fix as
-    # fetch_address_by_docnumber (see its v1.7 note). recordedDateRange's end
-    # date can't exceed the site's own "Certified through" date (runs ~1-2
-    # days behind real today) or the search returns "No Results Found" no
-    # matter what's actually in range. This was silently zeroing out every
-    # scrape (NOF/TAX/APPT all showing "0 new records" since at least
-    # 2026-08-21, confirmed by comparing that run's log to this one) --
-    # the results table never rendered because the query itself was
-    # malformed, not because of a real timeout or bot-detection issue.
-    today_str = (TODAY - timedelta(days=3)).strftime("%Y%m%d")
     offset = 0
     consecutive_empty = 0
 
-    log.info(f"Scraping {department}/{search_term} ({lead_type})...")
+    log.info(f"Scraping {department}/{doc_types or lead_type} ({lead_type})...")
 
     while True:
-        url = (
-            f"{PUBLICSEARCH_BASE}/results"
-            f"?department={department}"
-            f"&keywordSearch=false"
-            f"&limit=50"
-            f"&offset={offset}"
-            f"&recordedDateRange={cutoff}%2C{today_str}"
-            f"&searchOcrText=false"
-            f"&searchType=quickSearch"
-            f"&searchValue={urllib.parse.quote(search_term)}"
-            f"&sort=desc"
-            f"&sortBy=recordedDate"
-        )
+        if department == "FC":
+            end_str = (TODAY + timedelta(days=30)).strftime("%Y%m%d")
+            url = (
+                f"{PUBLICSEARCH_BASE}/results"
+                f"?department=FC"
+                f"&instrumentDateRange={cutoff}%2C{end_str}"
+                f"&keywordSearch=false"
+                f"&limit=50"
+                f"&offset={offset}"
+                f"&sort=desc"
+                f"&sortBy=recordedDate"
+                f"&searchType=advancedSearch"
+            )
+        else:
+            end_str = (TODAY - timedelta(days=3)).strftime("%Y%m%d")
+            url = (
+                f"{PUBLICSEARCH_BASE}/results"
+                f"?department={department}"
+                f"&docTypes={doc_types}"
+                f"&recordedDateRange={cutoff}%2C{end_str}"
+                f"&keywordSearch=false"
+                f"&limit=50"
+                f"&offset={offset}"
+                f"&sort=desc"
+                f"&sortBy=recordedDate"
+                f"&searchType=advancedSearch"
+            )
         log.info(f"  offset={offset}")
 
         try:
@@ -1050,7 +1081,7 @@ def scrape_publicsearch(department, search_term, lead_type, known_docs, driver, 
         offset += 50
         time.sleep(1.5)
 
-    log.info(f"{department}/{search_term}: {len(new_records)} new records")
+    log.info(f"{department}/{doc_types or lead_type}: {len(new_records)} new records")
     return new_records
 
 # ── Code Enforcement Scraper ──────────────────────────────────────────────────
@@ -1340,27 +1371,17 @@ def main():
     all_new = []
 
     try:
-        # Source 1: FC department — TAX foreclosures (must run BEFORE the blank
-        # NOF search below — known_docs is shared/mutated across both calls, and
-        # since blank search_term="" matches every FC-department doc, running it
-        # first was silently claiming every TAX doc as NOF before the TAX-specific
-        # search ever saw them. TAX leads first, then NOF sweeps up whatever's left.
-        tax_recs = scrape_publicsearch(
-            department="FC",
-            search_term="TAX",
-            lead_type="TAX",
-            known_docs=known_docs,
-            driver=driver,
-            run_ts=run_ts,
-        )
-        all_new.extend(tax_recs)
-
-        # Source 2: FC department — ALL remaining foreclosure notices (blank
-        # search = all docs). Nueces uses "FORECLOSURE NOTICE" doc type — blank
-        # search catches everything not already claimed by the TAX search above.
+        # Source 1: FC department — all foreclosure notices. v2.0: dropped the
+        # separate TAX-specific call -- it used quickSearch&searchValue=TAX,
+        # which never matched anything under department=FC (see
+        # scrape_publicsearch's v2.0 note) and every doc type seen here so
+        # far is "FORECLOSURE NOTICE" anyway (no evidence Nueces files a
+        # distinct TAX deed type through this department). If a doc's own
+        # "Doc Type" text ever contains TAX, classify it from within this
+        # single pass instead of a second full scrape for a type that may
+        # not exist.
         nof_recs = scrape_publicsearch(
             department="FC",
-            search_term="",
             lead_type="NOF",
             known_docs=known_docs,
             driver=driver,
@@ -1368,10 +1389,13 @@ def main():
         )
         all_new.extend(nof_recs)
 
-        # Source 3: RP department — Appointment of Substitute Trustee (Pre-Fore)
+        # Source 3: RP department — Appointment of Substitute Trustee (Pre-Fore).
+        # v2.0: docTypes=APPNMT is the real filter mechanism (live-verified via
+        # the Advanced Search UI) -- searchType=quickSearch&searchValue=
+        # APPOINTMENT never matched anything.
         appt_recs = scrape_publicsearch(
             department="RP",
-            search_term="APPOINTMENT",
+            doc_types="APPNMT",
             lead_type="APPT",
             known_docs=known_docs,
             driver=driver,
