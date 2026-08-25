@@ -83,17 +83,15 @@ def main():
     try:
         # Empty known_docs on purpose — nothing in the window gets skipped,
         # so this catches both mis-parsed AND never-captured docs.
+        # v2.0: matches fetch.py's scrape_publicsearch signature -- dropped
+        # search_term (quickSearch never matched anything under FC, see
+        # fetch.py's v2.0 note) and the separate TAX call (no evidence TAX
+        # is a distinct doc type here; everything seen is FORECLOSURE NOTICE).
         nof_recs = scrape_publicsearch(
-            department="FC", search_term="", lead_type="NOF",
+            department="FC", lead_type="NOF",
             known_docs=set(), driver=driver, run_ts=run_ts, days=args.days,
         )
         all_scraped.extend(nof_recs)
-
-        tax_recs = scrape_publicsearch(
-            department="FC", search_term="TAX", lead_type="TAX",
-            known_docs=set(), driver=driver, run_ts=run_ts, days=args.days,
-        )
-        all_scraped.extend(tax_recs)
 
         log.info(f"Re-pulled {len(all_scraped)} FC docs from the last {args.days} days")
 
