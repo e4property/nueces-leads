@@ -1018,7 +1018,7 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
                 and "NOTICE" not in c.upper()
                 and "APPOINTMENT" not in c.upper()
                 and "FORECLOSURE" not in c.upper()
-                and not re.search(r"\b(LOT|BLOCK|SECTION|SUBDIVISION|SUBD|TRACT|ABSTRACT)\b", c, re.IGNORECASE)
+                and not re.search(r"\b(LOTS?|LTS?|BLOCKS?|BLK|SECTION|SUBDIVISION|SUBD|TRACT|ABSTRACT|BUILDING|BLDG|UNIT|ADDITION|CONDOMINIUM|PHASE|APT)\b", c, re.IGNORECASE)
             ]
 
             grantor = ""
@@ -1046,7 +1046,7 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
             # Legal description from remaining cells
             legal = next(
                 (c for c in cells
-                 if re.search(r"\b(LOT|BLOCK|SECTION|SUBDIVISION|SUBD|TRACT|ABSTRACT)\b", c, re.IGNORECASE)
+                 if re.search(r"\b(LOTS?|LTS?|BLOCKS?|BLK|SECTION|SUBDIVISION|SUBD|TRACT|ABSTRACT|BUILDING|BLDG|UNIT|ADDITION|CONDOMINIUM|PHASE|APT)\b", c, re.IGNORECASE)
                  and len(c) > 10),
                 ""
             )
