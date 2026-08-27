@@ -793,6 +793,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
               <div class="act-row">
                 <button class="act-btn" onclick="skipLead()">Skip</button>
                 <button class="act-btn" onclick="copyAddress()">Copy Addr</button>
+                <button class="act-btn" onclick="openStreetView()">🗺️ Street View</button>
                 <button class="act-btn" onclick="openGHL()">GHL ↗</button>
               </div>
             </div>
@@ -804,6 +805,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
             <div class="act-row" style="margin-top:7px">
               <button class="act-btn" onclick="openGHL()">Open in GHL ↗</button>
               <button class="act-btn" onclick="copyAddress()">Copy Address</button>
+              <button class="act-btn" onclick="openStreetView()">🗺️ Street View</button>
             </div>
           </div>
           <div class="dsec">
@@ -1455,6 +1457,18 @@ async function enableBotOffer(){
 }
 
 function copyAddress(){const lead=allLeads.find(l=>l.doc_number===selectedDoc);if(!lead)return;const addressInput=document.getElementById('sf-address'),cityInput=document.getElementById('sf-city'),zipInput=document.getElementById('sf-zip');const addr=(addressInput&&addressInput.value.trim())||toTitle(lead.address||'');const city=(cityInput&&cityInput.value.trim())||toTitle(lead.city||'');const zip=(zipInput&&zipInput.value.trim())||lead.zip;navigator.clipboard.writeText(`${addr}, ${city} TX ${zip}`);toast('Address copied');}
+
+function openStreetView(){
+  const lead=allLeads.find(l=>l.doc_number===selectedDoc);
+  if(!lead){toast('No lead selected',true);return;}
+  const addressInput=document.getElementById('sf-address'),cityInput=document.getElementById('sf-city'),zipInput=document.getElementById('sf-zip');
+  const addr=(addressInput&&addressInput.value.trim())||toTitle(lead.address||'');
+  const city=(cityInput&&cityInput.value.trim())||toTitle(lead.city||'');
+  const zip=(zipInput&&zipInput.value.trim())||lead.zip;
+  if(!addr){toast('No address on file for this lead',true);return;}
+  const q=encodeURIComponent(`${addr}, ${city} TX ${zip}`);
+  window.open(`https://www.google.com/maps/search/?api=1&query=${q}`,'_blank');
+}
 function openGHL(){const ls=LS(selectedDoc);window.open(ls.ghlId?`https://app.justjarvis.com/v2/location/${S.ghlLocationId}/contacts/detail/${ls.ghlId}`:'https://app.justjarvis.com','_blank');}
 
 async function pushGHL(lead,phone){
