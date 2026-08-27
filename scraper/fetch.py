@@ -321,6 +321,28 @@ def auction_passed(sale_date_str):
         pass
     return False
 
+# v2.2: "if we haven't worked them by now, it's too late" -- user's own
+# words, 2026-08-26, after having to manually purge the same unworked 9/1
+# batch twice because the scraper kept re-discovering and re-adding it on
+# every run (removing a record from records.json doesn't stop it matching
+# the live county query again next time). This makes that a standing rule
+# instead of a repeated manual chore: an unworked lead within this many
+# days of its own auction is dead the same way a past auction is.
+TOO_SOON_TO_WORK_DAYS = 5
+
+def too_soon_to_work(sale_date_str):
+    if not sale_date_str:
+        return False
+    try:
+        parts = sale_date_str.strip().split("/")
+        if len(parts) == 3:
+            dt = datetime(int(parts[2]), int(parts[0]), int(parts[1]))
+            days_until = (dt - TODAY_NAIVE).days
+            return 0 <= days_until <= TOO_SOON_TO_WORK_DAYS
+    except Exception:
+        pass
+    return False
+
 def get_driver():
     opts = Options()
     opts.add_argument("--headless=new")
@@ -1231,10 +1253,10 @@ def purge_past_auctions(records):
         if lead_type in ("CE", "APPT") or rec.get("ghl_pushed") or rec.get("dash_phone"):
             kept.append(rec)
             continue
-        # NOF/TAX: purge if auction passed
+        # NOF/TAX: purge if auction passed, or too close to work at all
         if lead_type in ("NOF", "TAX"):
             sd = rec.get("sale_date", "")
-            if sd and auction_passed(sd):
+            if sd and (auction_passed(sd) or too_soon_to_work(sd)):
                 continue
             # Also purge stale leads with no sale date > 180 days
             if not sd and not filed_within_window(rec.get("date_filed", ""), 180):
