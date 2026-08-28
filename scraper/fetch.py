@@ -947,15 +947,35 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
 
         src = driver.page_source
 
-        if "no results" in src.lower() or "0 of 0" in src:
-            log.info(f"  No results — stopping")
-            break
+        # 2026-08-28: `"no results" in src.lower()` is a substring match
+        # against the ENTIRE raw page source, not a scoped element check --
+        # that phrase sits in the page's static/hidden markup (help text, a
+        # collapsed "No Results" container) on every load, results or not.
+        # The WebDriverWait above already correctly distinguishes real rows
+        # from a genuine No-Results state via a scoped h1 check -- but this
+        # second, unscoped check ran independently afterward and could
+        # false-positive even on a page WITH real rows, wrongly stopping the
+        # scrape. Confirmed as the exact same bug live in bexar-leads,
+        # silently dropping 34 of 53 real NOF filings in one day. Only trust
+        # "no results" here if there's truly no data row AND a genuine
+        # No-Results heading is present.
+        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", src, re.DOTALL | re.IGNORECASE)
+        data_rows_present = any(
+            not re.search(r"<th|thead|DOC.TYPE|RECORDED|GRANTOR|GRANTEE|PROPERTY", row, re.IGNORECASE)
+            for row in rows
+        )
+        if not data_rows_present:
+            if driver.find_elements(By.XPATH, "//h1[contains(text(),'No Results')]"):
+                log.info(f"  No results — stopping")
+                break
+            time.sleep(3)
+            src = driver.page_source
+            rows = re.findall(r"<tr[^>]*>(.*?)</tr>", src, re.DOTALL | re.IGNORECASE)
 
         m = re.search(r"(\d[\d,]*)\s*of\s*(\d[\d,]*)\s*results?", src, re.IGNORECASE)
         if m:
             log.info(f"  Results: {m.group(0)}")
 
-        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", src, re.DOTALL | re.IGNORECASE)
         page_recs = []
         data_row_count = 0  # v2.1: counted independent of known_docs -- see break condition below
 
