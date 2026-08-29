@@ -881,11 +881,23 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
 
     while True:
         if department == "FC":
-            end_str = (TODAY + timedelta(days=30)).strftime("%Y%m%d")
+            # 2026-08-28: instrumentDateRange started returning
+            # inconsistent/incomplete results for this department --
+            # confirmed the identical bug live in bexar-leads (same
+            # PublicSearch platform), where recordedDateRange correctly
+            # returned all real records for a window that instrumentDateRange
+            # returned zero for. Live-verified here too: the county site
+            # shows 140 real FORECLOSURE NOTICE records recorded in the last
+            # ~2 months via recordedDateRange, while this scraper had 0 NOF
+            # records captured at all using instrumentDateRange. Switched to
+            # the field actually proven to work; end date no longer needs to
+            # extend into the future since recorded dates are never forward-
+            # dated (they're always <= today).
+            end_str = TODAY.strftime("%Y%m%d")
             url = (
                 f"{PUBLICSEARCH_BASE}/results"
                 f"?department=FC"
-                f"&instrumentDateRange={cutoff}%2C{end_str}"
+                f"&recordedDateRange={cutoff}%2C{end_str}"
                 f"&keywordSearch=false"
                 f"&limit=50"
                 f"&offset={offset}"
