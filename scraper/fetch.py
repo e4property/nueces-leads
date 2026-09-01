@@ -310,13 +310,23 @@ def filed_within_window(date_str, days=SCRAPE_DAYS):
         return True
 
 def auction_passed(sale_date_str):
+    # 2026-09-01: was comparing against TODAY_NAIVE (UTC, the GitHub
+    # Actions runner's clock) and a date vs a full datetime -- confirmed
+    # live in bexar-leads this purged 418 leads (158 already in Jarvis)
+    # the instant UTC crossed midnight into a sale date, hours before
+    # that date even started in Central time, let alone before the
+    # actual auction (which runs mid-morning to afternoon). Compare
+    # Central-time calendar dates only, so a lead isn't purged until the
+    # day AFTER its auction.
     if not sale_date_str:
         return False
     try:
+        from zoneinfo import ZoneInfo
         parts = sale_date_str.strip().split("/")
         if len(parts) == 3:
             dt = datetime(int(parts[2]), int(parts[0]), int(parts[1]))
-            return dt < TODAY_NAIVE
+            today_central = datetime.now(ZoneInfo("America/Chicago")).date()
+            return dt.date() < today_central
     except Exception:
         pass
     return False
