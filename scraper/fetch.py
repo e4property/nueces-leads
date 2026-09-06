@@ -1534,6 +1534,23 @@ def main():
                 rec["is_coastal"] = is_coastal(rec.get("zip", ""))
                 rec["score"] = score_record(rec)
                 fetched += 1
+            elif not rec.get("owner"):
+                # 2026-09-05: this lead has now failed BOTH the tax-roll owner
+                # lookup AND the live doc-number address lookup, with no owner
+                # or address from either. Investigated live: some of these turn
+                # out to be a genuinely wrong doc_number on our side (the
+                # number resolves to an unrelated real document, e.g. a plain
+                # deed transfer, when looked up directly) -- root cause not
+                # nailed down (FC department rows have no grantor/grantee
+                # column to mis-extract from, so it isn't the obvious "grabbed
+                # the wrong cell" explanation), but rather than silently
+                # leaving this indistinguishable from a normal unworked lead
+                # forever, flag it so the operator knows not to expect more
+                # data to ever show up here without a manual county-site
+                # lookup. Confirmed live: 2026000454/2026000520 land on
+                # unrelated real documents (a Transfer and a Deed) when
+                # searched directly on the county portal.
+                rec["flags"] = list(set(rec.get("flags", []) + ["INDEX_INCOMPLETE"]))
             time.sleep(1)
         skipped = max(0, len(still_missing) - MAX_DOC_FETCH)
         log.info(
