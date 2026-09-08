@@ -886,10 +886,21 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
     cutoff = (TODAY - timedelta(days=window)).strftime("%Y%m%d")
     offset = 0
     consecutive_empty = 0
+    page_num = 0
+    # 2026-09-08: ported from bexar-leads after its scrape_chunk() hung
+    # 1.5+ hours with no absolute page cap -- this loop has the identical
+    # shape (same PublicSearch platform, same heuristic-only break
+    # conditions) and the same gap. Cheap insurance even though this
+    # specific county hasn't hung yet.
+    MAX_PAGES = 30
 
     log.info(f"Scraping {department}/{doc_types or lead_type} ({lead_type})...")
 
     while True:
+        page_num += 1
+        if page_num > MAX_PAGES:
+            log.warning(f"  Hit MAX_PAGES={MAX_PAGES} — stopping, rest deferred to next run")
+            break
         if department == "FC":
             # 2026-08-28: instrumentDateRange started returning
             # inconsistent/incomplete results for this department --
