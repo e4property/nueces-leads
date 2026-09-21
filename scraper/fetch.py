@@ -186,7 +186,7 @@ def normalize_legal(s):
     return re.sub(r"\s+", " ", s.upper().strip())
 
 # ── Legal description signature matching (v1.1) ───────────────────────────────
-LOT_RE       = re.compile(r"\bLOT[S]?\.?\s*([0-9A-Z\-]+)")
+LOT_RE       = re.compile(r"\bL(?:OT[S]?|T)\.?\s*([0-9A-Z\-]+)")
 BLOCK_NUM_RE = re.compile(r"\bBL(?:OC)?K\.?\s*([0-9A-Z\-]+)")
 SECTION_RE   = re.compile(r"\bSEC(?:TION)?\.?\s*([0-9A-Z\-]+)")
 
@@ -629,19 +629,36 @@ def load_lookup():
         log.warning(f"Lookup load error: {e}")
     return lookup, by_sig_lot, by_sig, by_owner
 
-def _resolve_sig_candidates(candidates, block):
-    """Pick the best row out of multiple signature-match candidates."""
+def _resolve_sig_candidates(candidates, block, lot=None):
+    """
+    Pick the best row out of multiple signature-match candidates.
+
+    v1.2: candidates here come from the subdivision-name-only index (by_sig),
+    used when the more specific (name, lot) index had no match for our lot.
+    That means every candidate here is, by construction, for a DIFFERENT lot
+    than the one we're looking for -- including when there's exactly one
+    candidate. Blindly accepting a single leftover candidate silently
+    cross-contaminated appraised_value/zip/owner from a sibling lot in the
+    same subdivision (e.g. a multi-lot owner where lot 3A borrowed lot 1's
+    $18.6M appraisal and a wrong owner name). If a candidate's own parsed
+    lot is known and doesn't match ours, reject it rather than guess.
+    """
     if not candidates:
         return None
-    if len(candidates) == 1:
-        return candidates[0]
     if block:
         for cand in candidates:
-            _, _, cand_block, _ = parse_legal_components(cand.get("legal_desc", ""))
-            if cand_block and cand_block == block:
+            _, cand_lot, cand_block, _ = parse_legal_components(cand.get("legal_desc", ""))
+            if cand_block and cand_block == block and (not lot or not cand_lot or cand_lot == lot):
                 return cand
-    # No confident tie-break — take the first as a best-effort guess
-    return candidates[0]
+    if len(candidates) == 1:
+        cand = candidates[0]
+        _, cand_lot, _, _ = parse_legal_components(cand.get("legal_desc", ""))
+        if lot and cand_lot and cand_lot != lot:
+            return None
+        return cand
+    # No confident tie-break and multiple candidates with no lot to
+    # cross-check against -- don't guess.
+    return None
 
 def enrich_from_lookup(rec, lookup_tuple):
     """
@@ -669,9 +686,14 @@ def enrich_from_lookup(rec, lookup_tuple):
         name_sig, lot, block, section = parse_legal_components(raw_legal)
         if name_sig:
             candidates = by_sig_lot.get((name_sig, lot), []) if lot else []
-            if not candidates:
+            if candidates:
+                # exact (name, lot) match -- these are all genuinely our lot
+                result = _resolve_sig_candidates(candidates, block)
+            else:
+                # fell back to name-only candidates: every one is for some
+                # OTHER lot in the subdivision, so cross-check against ours
                 candidates = by_sig.get(name_sig, [])
-            result = _resolve_sig_candidates(candidates, block)
+                result = _resolve_sig_candidates(candidates, block, lot=lot)
 
     # Strategy 4: situs address exact match
     if not result:
