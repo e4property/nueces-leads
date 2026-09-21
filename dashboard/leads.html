@@ -513,7 +513,9 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 <body>
 <!-- NAV -->
 <div class="nav">
-  <div class="nav-logo">NUECES<span>·</span>LEADS<sub>v1.0</sub></div>
+  <div class="nav-logo" onclick="toggleCountySwitcher()">NUECES<span>·</span>LEADS<sub>v4.2</sub> <span style="font-size:10px;color:var(--dim)">▾</span>
+    <div id="county-dropdown" style="display:none;position:absolute;top:42px;left:0;background:var(--surface);border:1px solid var(--border2);border-radius:var(--rl);min-width:220px;z-index:9999;box-shadow:var(--shadow-md);overflow:hidden"><div id="county-list"></div><div style="padding:8px 12px;border-top:1px solid var(--border)"><button onclick="openSettings();closeCountySwitcher()" style="font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;padding:0;font-family:'Inter',sans-serif">+ Manage counties</button></div></div>
+  </div>
   <div class="nav-tabs">
     <div class="ntab on" id="ntab-dash" onclick="showView('dash',this)">Dashboard</div>
     <div class="ntab" id="ntab-work" onclick="showView('work',this)">Work Leads <span class="tc" id="nav-unsearch">—</span></div>
@@ -524,6 +526,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
   <div class="nav-r">
     <span class="upd" id="last-upd"></span>
     <div class="ghl-pill"><div class="ghl-dot" id="ghl-dot"></div><span id="ghl-txt">GHL</span></div>
+    <button class="nav-btn" id="btn-driveby" onclick="toggleDriveBy()">🚗 Drive-By</button>
     <button class="nav-btn" onclick="openSettings()">⚙ Settings</button>
     <button class="nav-btn run" id="btn-scrape" onclick="triggerScrape()">▶ Run Scrape</button>
   </div>
@@ -666,6 +669,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
         <span class="sc on" id="sort-recent" onclick="setSort('recent',this)">Recent</span>
         <span class="sc" id="sort-filed" onclick="setSort('filed',this)">Filed</span>
         <span class="sc" id="sort-urgency" onclick="setSort('urgency',this)">Urgency</span>
+        <span class="sc" id="sort-saledate" onclick="setSort('saledate',this)">Sale Date</span>
         <span class="sc" id="sort-score" onclick="setSort('score',this)">Score</span>
         <span class="sc" id="sort-equity" onclick="setSort('equity',this)">Equity</span>
       </div>
@@ -687,6 +691,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
         <div class="detail-hdr" id="detail-hdr">
           <div class="dh-name" id="d-name"></div>
           <div class="dh-addr" id="d-addr" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"></div>
+          <div class="dh-mail-addr" id="d-mail-addr" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px;color:var(--amber-dk)"></div>
           <div class="dh-meta" id="d-meta"></div>
           <div class="dh-badges" id="d-badges"></div>
         </div>
@@ -795,6 +800,8 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
                 <button class="act-btn" onclick="skipLead()">Skip</button>
                 <button class="act-btn" onclick="copyAddress()">Copy Addr</button>
                 <button class="act-btn" onclick="openStreetView()">🗺️ Street View</button>
+                <button class="act-btn" style="background:var(--red-bg);border-color:var(--red-mid);color:var(--red-dk)" onclick="tagDriveBy('VACANT')">✅ Vacant</button>
+                <button class="act-btn" onclick="tagDriveBy('OCCUPIED')">🏠 Occupied</button>
                 <button class="act-btn" onclick="openGHL()">GHL ↗</button>
               </div>
             </div>
@@ -807,6 +814,8 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
               <button class="act-btn" onclick="openGHL()">Open in GHL ↗</button>
               <button class="act-btn" onclick="copyAddress()">Copy Address</button>
               <button class="act-btn" onclick="openStreetView()">🗺️ Street View</button>
+                <button class="act-btn" style="background:var(--red-bg);border-color:var(--red-mid);color:var(--red-dk)" onclick="tagDriveBy('VACANT')">✅ Vacant</button>
+                <button class="act-btn" onclick="tagDriveBy('OCCUPIED')">🏠 Occupied</button>
             </div>
           </div>
           <div class="dsec">
@@ -864,8 +873,17 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
     <label>GHL API Key</label><input type="password" id="set-apikey" placeholder="pit-…">
     <label>GHL Location ID</label><input type="text" id="set-locid" placeholder="UAOJlgeerLu3GChP9jDJ">
     <label>Records JSON URL (active county)</label><input type="text" id="set-url" placeholder="https://e4property.github.io/nueces-leads/records.json">
-    <label>Nueces County Records URL</label><input type="text" id="set-nueces-url" placeholder="https://e4property.github.io/nueces-leads/records.json">
-    <label>GitHub Token (Scrape)</label><input type="password" id="set-ghtoken" placeholder="ghp_…">
+    <label>ForeWarn Budget</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span style="font-size:12px;color:var(--muted)" id="fw-budget-display"></span>
+      <button onclick="resetBudget()" style="padding:5px 12px;border-radius:6px;border:1px solid var(--border2);background:var(--surface);font-size:11px;color:var(--red);cursor:pointer;font-weight:600">Reset Counter</button>
+    </div>
+    <label>Jarvis Push Status</label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <span style="font-size:12px;color:var(--muted);flex:1 1 200px;min-width:0" id="jarvis-reconcile-status">Checks GHL for leads that were actually pushed but aren't marked as such locally</span>
+      <button onclick="reconcileJarvis()" id="reconcile-btn" style="padding:5px 12px;border-radius:6px;border:1px solid var(--border2);background:var(--surface);font-size:11px;color:var(--blue);cursor:pointer;font-weight:600;flex-shrink:0">Reconcile</button>
+    </div>
+    <input type="password" id="set-ghtoken" placeholder="ghp_…">
     <div class="modal-actions">
       <button class="nav-btn" onclick="closeSettings()">Cancel</button>
       <button class="nav-btn run" onclick="saveSettings()">Save</button>
@@ -880,7 +898,7 @@ let S={ghlApiKey:'',ghlLocationId:'UAOJlgeerLu3GChP9jDJ',recordsUrl:REC_URL_DEFA
 let allLeads=[],filteredLeads=[],selectedDoc=null,selectedIdx=-1;
 let currentView='all',currentSort='recent',searchQ='',currentNavView='dash';
 
-function init(){loadState();S.recordsUrl='https://e4property.github.io/nueces-leads/records.json';checkWeekReset();updateBudgetUI();updateResetInfo();fetchLeads();setupKeys();}
+function init(){loadState();checkWeekReset();updateBudgetUI();updateResetInfo();initCountySwitcher();fetchLeads();setupKeys();}
 function sundayTs(){const n=new Date(),d=new Date(n);d.setDate(n.getDate()-n.getDay());d.setHours(0,0,0,0);return d.getTime();}
 function loadState(){try{const s=localStorage.getItem(SK);if(s)S={...S,...JSON.parse(s)};}catch(e){}}
 function saveState(){localStorage.setItem(SK,JSON.stringify(S));}
@@ -900,7 +918,7 @@ function showView(v,el){
 }
 
 /* KEYS */
-function setupKeys(){document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;if(e.key==='d'){showView('dash');return;}if(e.key==='w'){showView('work');return;}if(e.key==='j'||e.key==='ArrowDown'){e.preventDefault();navList(1);}else if(e.key==='k'||e.key==='ArrowUp'){e.preventDefault();navList(-1);}else if(e.key==='n'||e.key==='N'){e.preventDefault();navNextUnworked();}else if(e.key==='p'){e.preventDefault();const pi=document.getElementById('phone-input');if(pi&&pi.offsetParent!==null){pi.focus();pi.select();}}else if(e.key==='c'&&selectedDoc){copyAddress();}else if(e.key==='g'&&selectedDoc){openGHL();}});}
+function setupKeys(){document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;if(e.key==='d'){showView('dash');return;}if(e.key==='w'){showView('work');return;}if(e.key==='j'||e.key==='ArrowDown'){e.preventDefault();navList(1);}else if(e.key==='k'||e.key==='ArrowUp'){e.preventDefault();navList(-1);}else if(e.key==='n'||e.key==='N'){e.preventDefault();navNextUnworked();}else if(e.key==='p'){e.preventDefault();const pi=document.getElementById('phone-input');if(pi&&pi.offsetParent!==null){pi.focus();pi.select();}}else if(e.key==='c'&&selectedDoc){copyAddress();}else if(e.key==='g'&&selectedDoc){openGHL();}else if(e.key==='v'&&selectedDoc&&driveByMode){e.preventDefault();tagDriveBy('VACANT');}else if(e.key==='o'&&selectedDoc&&driveByMode){e.preventDefault();tagDriveBy('OCCUPIED');}});}
 
 function navList(dir){const ni=Math.max(0,Math.min(filteredLeads.length-1,selectedIdx+dir));if(ni!==selectedIdx){selectedIdx=ni;const l=filteredLeads[ni];if(l){selectLead(l.doc_number);const items=document.querySelectorAll('.litem');if(items[ni])items[ni].scrollIntoView({block:'nearest'});}}}
 function navNextUnworked(){const start=selectedIdx>=0?selectedIdx+1:0;for(let i=start;i<filteredLeads.length;i++){const l=filteredLeads[i];const ls=LS(l.doc_number);if(!ls.phone&&!ls.skipped){selectedIdx=i;selectLead(l.doc_number);const items=document.querySelectorAll('.litem');if(items[i])items[i].scrollIntoView({block:'nearest'});toast('Next unworked','ok');return;}}for(let i=0;i<start;i++){const l=filteredLeads[i];const ls=LS(l.doc_number);if(!ls.phone&&!ls.skipped){selectedIdx=i;selectLead(l.doc_number);const items=document.querySelectorAll('.litem');if(items[i])items[i].scrollIntoView({block:'nearest'});toast('Next unworked (wrapped)','ok');return;}}toast('All leads worked!','ok');}
@@ -943,7 +961,7 @@ function isPushedThisWeek(l){
 function getJarvisCount(){return allLeads.filter(l=>l.ghl_pushed).length;}
 function getPushedTodayCount(){return allLeads.filter(isPushedToday).length;}
 function getPushedWeekCount(){return allLeads.filter(isPushedThisWeek).length;}
-function getGHLTag(l){if(isStacked(l))return'nueces_stacked';if(isVBP(l)&&!isStacked(l))return'nueces_vbp';if(isCEOnly(l))return'nueces_ce';if(isLP(l))return'nueces_lp';if(isAppt(l))return'nueces_prefore';return'nueces_lead';}
+function getGHLTag(l){const cid=getActiveCounty().id;if(isStacked(l))return cid+'_stacked';if(isVBP(l)&&!isStacked(l))return cid+'_vbp';if(isCEOnly(l))return cid+'_ce';if(isLP(l))return cid+'_lp';if(isAppt(l))return cid+'_prefore';return cid+'_lead';}
 function getVBPViolation(l){return l.ce_cat_label||l.ce_reason||l.ce_category||'';}
 function isVBPDangerous(l){const v=getVBPViolation(l).toLowerCase();return v.includes('dangerous')||v.includes('bsb');}
 function filedToNum(l){const df=l.date_filed||l.opened_date||'';try{const p=df.split('/');if(p.length===2)return parseInt(p[1])*100+parseInt(p[0]);if(p.length===3)return parseInt(p[2])*10000+parseInt(p[0])*100+parseInt(p[1]);}catch(e){}return 0;}
@@ -1075,7 +1093,7 @@ function setView(view,el,source){
 function setTypeTab(id,el){if(id==='jarvis'){currentView='jarvis';if(currentNavView==='dash')showView('work');document.querySelectorAll('.sidebar .sb-item').forEach(i=>i.classList.remove('on'));document.querySelectorAll('.type-tabs .ttab').forEach(t=>t.classList.remove('on'));const jt=document.getElementById('tt-jarvis-tab');if(jt)jt.classList.add('on');const sj=document.getElementById('sf-jarvis');if(sj)sj.classList.add('on');renderJarvisView();return;}setView(id,el);}
 function setSort(s,el){currentSort=s;document.querySelectorAll('.sort-row .sc').forEach(c=>c.classList.remove('on'));if(el)el.classList.add('on');else{const se=document.getElementById('sort-'+s);if(se)se.classList.add('on');}filterLeads();}
 
-function renderJarvisView(){const ll=document.getElementById('lead-list');const jl=allLeads.filter(l=>{const ls=LS(l.doc_number);return ls.ghl_pushed||ls.phone;}).sort((a,b)=>{const la=LS(a.doc_number),lb=LS(b.doc_number);return(lb.searchedAt||0)-(la.searchedAt||0);});if(!jl.length){ll.innerHTML='<div class="jarvis-empty">No leads in Jarvis yet</div>';return;}const colors=[['var(--blue-bg)','var(--blue-dk)'],['var(--teal-bg)','var(--teal-dk)'],['var(--purple-bg)','var(--purple-dk)'],['var(--amber-bg)','var(--amber-dk)']];ll.innerHTML='<div>'+jl.map((l,i)=>{const ls=LS(l.doc_number);const initials=(l.owner||'??').split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'??';const [bg,fg]=colors[i%colors.length];const tag=getGHLTag(l);const tagCls=tag==='nueces_stacked'?'b-stacked':tag==='nueces_vbp'?'b-vbp':tag==='nueces_ce'?'b-ce':tag==='nueces_lp'?'b-lp':'b-nof';const pushed=ls.searchedAt?new Date(ls.searchedAt).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'';return`<div class="jarvis-item" onclick="selectLead('${l.doc_number}')"><div class="jarvis-avatar" style="background:${bg};color:${fg}">${initials}</div><div class="jarvis-info"><div class="jarvis-name">${l.owner||'—'}</div><div class="jarvis-meta">${l.address||''} · ${ls.phone||'no phone'}</div></div><div class="jarvis-right"><span class="badge ${tagCls}">${tag.replace('nueces_','')}</span><span class="jarvis-date">${pushed}</span></div></div>`;}).join('')+'</div>';}
+function renderJarvisView(){const ll=document.getElementById('lead-list');const jl=allLeads.filter(l=>{const ls=LS(l.doc_number);return ls.ghl_pushed||ls.phone;}).sort((a,b)=>{const la=LS(a.doc_number),lb=LS(b.doc_number);return(lb.searchedAt||0)-(la.searchedAt||0);});if(!jl.length){ll.innerHTML='<div class="jarvis-empty">No leads in Jarvis yet</div>';return;}const colors=[['var(--blue-bg)','var(--blue-dk)'],['var(--teal-bg)','var(--teal-dk)'],['var(--purple-bg)','var(--purple-dk)'],['var(--amber-bg)','var(--amber-dk)']];ll.innerHTML='<div>'+jl.map((l,i)=>{const ls=LS(l.doc_number);const initials=(l.owner||'??').split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'??';const [bg,fg]=colors[i%colors.length];const tag=getGHLTag(l);const cidj=getActiveCounty().id;const tagCls=tag===cidj+'_stacked'?'b-stacked':tag===cidj+'_vbp'?'b-vbp':tag===cidj+'_ce'?'b-ce':tag===cidj+'_lp'?'b-lp':'b-nof';const pushed=ls.searchedAt?new Date(ls.searchedAt).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'';return`<div class="jarvis-item" onclick="selectLead('${l.doc_number}')"><div class="jarvis-avatar" style="background:${bg};color:${fg}">${initials}</div><div class="jarvis-info"><div class="jarvis-name">${l.owner||'—'}</div><div class="jarvis-meta">${l.address||''} · ${ls.phone||'no phone'}</div></div><div class="jarvis-right"><span class="badge ${tagCls}">${tag.replace(cidj+'_','')}</span><span class="jarvis-date">${pushed}</span></div></div>`;}).join('')+'</div>';}
 
 function getEquity(lead){if(!lead.loan_amount||!lead.appraised_value)return null;const loan=parseFloat((lead.loan_amount+'').replace(/[$,]/g,''))||0,appr=parseFloat(lead.appraised_value)||0;if(!appr)return null;return{equity:appr-loan,appr,loan,pct:Math.max(0,Math.min(100,Math.round((appr-loan)/appr*100)))};}
 
@@ -1105,6 +1123,7 @@ function filterLeads(){
     if(currentSort==='filed')return filedToNum(b)-filedToNum(a);
     if(currentSort==='score')return(b.score||0)-(a.score||0);
     if(currentSort==='equity'){const ae=getEquity(a),be=getEquity(b);if(!ae&&!be)return 0;if(!ae)return 1;if(!be)return-1;return be.equity-ae.equity;}
+    if(currentSort==='saledate'){const ad=a.days_until_sale,bd=b.days_until_sale;if(ad==null&&bd==null)return(a.owner||'').localeCompare(b.owner||'');if(ad==null)return 1;if(bd==null)return-1;if(ad!==bd)return ad-bd;return(a.owner||'').localeCompare(b.owner||'');}
     const aghl=LS(a.doc_number).ghl_pushed?1:0,bghl=LS(b.doc_number).ghl_pushed?1:0;if(aghl!==bghl)return aghl-bghl;const ad=a.days_until_sale??9999,bd=b.days_until_sale??9999;if(ad!==bd)return ad-bd;return(b.score||0)-(a.score||0);
   });
   filteredLeads=list;selectedIdx=filteredLeads.findIndex(l=>l.doc_number===selectedDoc);renderList();
@@ -1132,9 +1151,10 @@ function renderItem(lead,idx){
   else if(lp)b.push(`<span class="badge b-lp">LP</span>`);
   else if(isProbate(lead))b.push(`<span class="badge" style="background:var(--amber-bg);color:var(--amber-dk);border:1px solid var(--amber-mid)">PROBATE</span>`);
   else if(isAppt(lead))b.push(`<span class="badge" style="background:var(--red-bg);color:var(--red-dk);border:1px solid var(--red-mid)">⚡PRE</span>`);
-  else{if(lead.absentee)b.push(`<span class="badge b-abs">ABS</span>`);b.push(lead.type==='TAX'?`<span class="badge b-tax">TAX</span>`:`<span class="badge b-nof">NOF</span>`);}
+  else{if(lead.absentee)b.push(`<span class="badge b-abs">ABS</span>`);const tt=lead.type==='TAX'?'TAX':lead.type==='MECHLN'?'MECH LIEN':lead.type==='LP'?'LIS PEN':lead.type&&lead.type!=='NOF'?lead.type:'NOF';b.push(`<span class="badge b-nof">${tt}</span>`);}
   if(isLongHeld(lead))b.push(`<span class="badge b-longheld">LONG HELD</span>`);
   if(lead.on_market)b.push(`<span class="badge" style="background:var(--amber-bg);color:var(--amber-dk);border:1px solid var(--amber-mid)">🏷️ ON MARKET</span>`);
+  if(lead.source_verify_status==='mismatch')b.push(`<span class="badge" style="background:var(--red-bg);color:var(--red-dk);border:1px solid var(--red-mid)">⚠️ VERIFY ADDRESS</span>`);
   if(lead.flags?.includes('INDEX_INCOMPLETE'))b.push(`<span class="badge" style="background:var(--red-bg);color:var(--red-dk);border:1px solid var(--red-mid)" title="County's own index has no owner/address for this document, and the live doc-number lookup also came up empty — this may never fill in without a manual county-site search">⚠️ NO INDEX DATA</span>`);
   if(lead.owner_is_entity)b.push(`<span class="badge" style="background:var(--red-bg);color:var(--red-dk);border:1px solid var(--red-mid)" title="No borrower name on file — the name shown is the lender/servicer/trustee firm, not a person">⚠️ NO BORROWER</span>`);
   if(ls.ghl_pushed)b.push(`<span class="badge b-ghl">GHL✓</span>`);
@@ -1153,7 +1173,35 @@ function renderItem(lead,idx){
 <div class="li-bot"><div class="li-badges">${b.join('')}</div><div class="li-right">${scrapedStr?`<span class="li-age ${scrapedCls}">⬇ ${scrapedStr}</span>`:''} ${ageStr?`<span class="li-age ${ageCls}">${ageStr}</span>`:''} ${lead.appr_trend?`<span class="li-trend ${trendClass(lead.appr_trend)}">${trendArrow(lead.appr_trend)}</span>`:''} ${eqStr?`<span class="li-eq">Eq <b>${eqStr}</b></span>`:''} ${dateStr?`<span class="li-date ${dateCls}">🔨${dateStr}</span>`:''}</div></div>
 </div>`;}
 
-function selectLead(doc){selectedDoc=doc;selectedIdx=filteredLeads.findIndex(l=>l.doc_number===doc);const lead=allLeads.find(l=>l.doc_number===doc);if(!lead)return;if(currentNavView==='dash')showView('work');renderList();populateDetail(lead);}
+function selectLead(doc){selectedDoc=doc;selectedIdx=filteredLeads.findIndex(l=>l.doc_number===doc);const lead=allLeads.find(l=>l.doc_number===doc);if(!lead)return;if(currentNavView==='dash')showView('work');renderList();populateDetail(lead);if(driveByMode)openStreetView();}
+let driveByMode=false;
+function toggleDriveBy(){
+  driveByMode=!driveByMode;
+  const btn=document.getElementById('btn-driveby');
+  btn.classList.toggle('run',driveByMode);
+  btn.textContent=driveByMode?'🚗 Drive-By: ON':'🚗 Drive-By';
+  if(driveByMode){
+    showView('work');setView('vbp');
+    toast('Drive-By mode on — j/k to move, v=vacant confirmed, o=occupied','ok');
+    if(selectedDoc)openStreetView();
+  } else {
+    toast('Drive-By mode off','ok');
+  }
+}
+function tagDriveBy(status){
+  if(!selectedDoc){toast('No lead selected',true);return;}
+  if(!S.leads[selectedDoc])S.leads[selectedDoc]={};
+  const ta=document.getElementById('notes-area');
+  const stamp=`[DRIVE-BY ${status} ${new Date().toLocaleDateString()}]`;
+  const existing=(ta.value||'').replace(/\[DRIVE-BY [A-Z]+ [\d\/]+\]\s*/,'').trim();
+  const notes=(stamp+' '+existing).trim();
+  ta.value=notes;
+  S.leads[selectedDoc].notes=notes;
+  saveState();
+  writeBackToRepo(selectedDoc,{dash_notes:notes});
+  toast(status==='VACANT'?'✅ Confirmed vacant':'🏠 Marked occupied','ok');
+  navList(1);
+}
 
 function parseName(owner){if(!owner||!owner.trim())return{first:'',last:''};let c=owner.replace(/\s*&\s*$/,'').trim();if(c.includes('&'))c=c.split('&')[0].trim();c=c.replace(/\b(JR|SR|II|III|IV|V|EST OF|C\/T|ETAL|C\/O)\b/gi,'').replace(/\s+/g,' ').trim();const p=c.split(/\s+/).filter(Boolean);if(!p.length)return{first:'',last:''};if(p.length===1)return{first:toTitle(p[0]),last:''};return{first:toTitle(p.slice(1).join(' ')),last:toTitle(p[0])};}
 function fmtDate(raw){if(!raw)return'—';raw=raw.trim();const mdy=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(mdy){const d=new Date(+mdy[3],+mdy[1]-1,+mdy[2]);return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}const my=raw.match(/^(\d{1,2})\/(\d{4})$/);if(my){const d=new Date(+my[2],+my[1]-1,1);return d.toLocaleDateString('en-US',{month:'short',year:'numeric'});}const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);if(iso){const d=new Date(+iso[1],+iso[2]-1,+iso[3]);return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}return raw;}
@@ -1174,17 +1222,23 @@ function populateDetail(lead){
   const dName=stacked?(lead.owner||'Vacant+CE Property'):vbp?(lead.owner||'Vacant Property'):ce&&!lead.owner?(lead.ce_cat_label||'Code Enforcement'):lp&&!lead.owner?'Lis Pendens':appt&&!lead.owner?'Pre-Foreclosure':(lead.owner||'—');
   set('d-name',dName);
   document.getElementById('d-addr').innerHTML=`<span>${lead.address||''}${lead.city?', '+lead.city:''} TX ${lead.zip||''}</span>`+(lead.address?`<button class="act-btn" style="padding:2px 8px;font-size:11px" onclick="openStreetView()">🗺️ Street View</button>`:'');
-  document.getElementById('d-meta').textContent=ce?`Case: ${lead.ce_case_id||lead.doc_number} · Opened: ${fmtDate(lead.opened_date)}`:`Doc: ${lead.doc_number} · Filed: ${fmtDate(lead.date_filed)}${lead.sale_date?' · Sale: '+fmtDate(lead.sale_date):''}`;
+  const mailEl=document.getElementById('d-mail-addr');
+  const propNorm=(lead.address||'').trim().toUpperCase();
+  const mailDiffers=lead.mail_addr&&!lead.mail_addr.toUpperCase().startsWith(propNorm);
+  if(lead.absentee&&mailDiffers){mailEl.style.display='flex';mailEl.innerHTML=`<span>📬 Mailing: ${lead.mail_addr}</span><button class="act-btn" style="padding:2px 8px;font-size:11px" onclick="copyMailAddress()">📋 Copy Mailing</button>`;}
+  else{mailEl.style.display='none';mailEl.innerHTML='';}
+  document.getElementById('d-meta').textContent=ce?`Case: ${lead.ce_case_id||lead.doc_number} · Opened: ${fmtDate(lead.opened_date)}`:`Doc: ${lead.doc_number} · ${lead.date_recorded?'Recorded: '+fmtDate(lead.date_recorded):'Filed: '+fmtDate(lead.date_filed)}${lead.sale_date?' · Sale: '+fmtDate(lead.sale_date):''}`;
   const b=[];
   if(isNew)b.push(`<span class="badge b-new" style="padding:2px 9px;font-size:10px">✨ NEW</span>`);
   if(lead.on_market)b.push(`<span class="badge" style="background:var(--amber-bg);color:var(--amber-dk);border:1px solid var(--amber-mid);padding:2px 9px;font-size:10px">🏷️ ON MARKET${lead.on_market_status?' ('+lead.on_market_status+')':''}</span>`);
   if(lead.flags?.includes('INDEX_INCOMPLETE'))b.push(`<span class="badge" style="background:var(--red-bg);color:var(--red-dk);border:1px solid var(--red-mid);padding:2px 9px;font-size:10px" title="County's own index has no owner/address for this document, and the live doc-number lookup also came up empty">⚠️ NO INDEX DATA</span>`);
+  if(lead.source_verify_status==='mismatch')b.push(`<span class="badge" style="background:var(--red-bg);color:var(--red-dk);border:1px solid var(--red-mid);padding:2px 9px;font-size:10px">⚠️ Address doesn't match county doc — verify before working</span>`);
   if(stacked){b.push(`<span class="badge b-stacked" style="padding:2px 9px;font-size:10px">STACKED</span>`);if(isVBPDangerous(lead))b.push(`<span class="badge b-dang" style="padding:2px 9px;font-size:10px">🔴 Dangerous</span>`);}
   else if(vbp)b.push(`<span class="badge b-vbp" style="padding:2px 9px;font-size:10px">VBP</span>`);
   else if(ce)b.push(`<span class="badge b-ce" style="padding:2px 9px;font-size:10px">⚠ CE</span>`);
   else if(lp)b.push(`<span class="badge b-lp" style="padding:2px 9px;font-size:10px">📜 LP</span>`);
   else if(appt)b.push(`<span class="badge" style="background:var(--red-bg);color:var(--red-dk);border:1px solid var(--red-mid);padding:2px 9px;font-size:10px">⚡ Pre-Fore</span>`);
-  else{if(lead.absentee)b.push(`<span class="badge b-abs" style="padding:2px 9px;font-size:10px">Absentee</span>`);b.push(lead.type==='TAX'?`<span class="badge b-tax" style="padding:2px 9px;font-size:10px">Tax Fore</span>`:`<span class="badge b-nof" style="padding:2px 9px;font-size:10px">NOF</span>`);}
+  else{if(lead.absentee)b.push(`<span class="badge b-abs" style="padding:2px 9px;font-size:10px">Absentee</span>`);const tt2=lead.type==='TAX'?'Tax Fore':lead.type==='MECHLN'?'Mechanics Lien':lead.type==='LP'?'Lis Pendens':lead.type&&lead.type!=='NOF'?lead.type:'NOF';b.push(`<span class="badge b-nof" style="padding:2px 9px;font-size:10px">${tt2}</span>`);}
   if(isLongHeld(lead))b.push(`<span class="badge b-longheld" style="padding:2px 9px;font-size:10px">🏠 Long Held ${lead.tenure_years}yr</span>`);
   if(ls.ghl_pushed)b.push(`<span class="badge b-ghl" style="padding:2px 9px;font-size:10px">In Jarvis</span>`);
   const d=lead.days_until_sale;
@@ -1250,12 +1304,12 @@ function populateDetail(lead){
   document.getElementById('notes-area').value=ls.notes||'';
   renderTimeline(lead,ls);
   let info='';
-  if(stacked){const viol=getVBPViolation(lead);info=`Source: VBP + CE (STACKED)\nAddress: ${lead.address||'—'}\nViolation: ${viol||'—'}\nStatus: ${lead.ce_status||'Active'}\nGHL Tag: nueces_stacked\nOwner: ${lead.owner||'Not found'}`;}
-  else if(vbp){info=`Source: Vacant Building Program\nAddress: ${lead.address||'—'}\nGHL Tag: nueces_vbp\nOwner: ${lead.owner||'Not found'}`;}
-  else if(ce){info=`Source: Code Enforcement — Corpus Christi\nViolation: ${lead.ce_reason||'—'}\nStatus: ${lead.ce_status||'—'}\nGHL Tag: nueces_ce`;}
-  else if(lp){info=`Source: Lis Pendens (PublicSearch RP)\nAddress: ${lead.address||'—'}\nFiled: ${fmtDate(lead.date_filed)}\nGHL Tag: nueces_lp\nNote: LP filings often precede NOF by weeks/months.`;}
-  else if(appt){info=`Source: Appointment of Substitute Trustee\nAddress: ${lead.address||'—'}\nFiled: ${fmtDate(lead.date_filed)}\nGHL Tag: nueces_prefore\nNote: Filed 2-4 weeks before NOF — earliest signal.`;}
-  else{info=`Type: ${lead.type} · Score: ${lead.score}${tenureBonus>0?' (+'+tenureBonus+'pts tenure)':''}\nFiled: ${fmtDate(lead.date_filed)}\nGHL Tag: nueces_lead\nAbsentee: ${lead.absentee?'Yes':'No'}\nMail: ${lead.mail_addr||'—'}`;if(lead.sale_date)info+=`\nSale Date: ${fmtDate(lead.sale_date)}`;if(appr)info+=`\nAppraised: $${appr.toLocaleString()}`;if(tenureYrs!=null)info+=`\nYrs Owned: ${tenureYrs} yrs (deed: ${fmtDate(lead.deed_date)})`;if(lastSale)info+=`\nLast Sale: ${lastSale}`;}
+  if(stacked){const viol=getVBPViolation(lead);info=`Source: VBP + CE (STACKED)\nAddress: ${lead.address||'—'}\nViolation: ${viol||'—'}\nStatus: ${lead.ce_status||'Active'}\nGHL Tag: ${getActiveCounty().id}_stacked\nOwner: ${lead.owner||'Not found'}`;}
+  else if(vbp){info=`Source: Vacant Building Program\nAddress: ${lead.address||'—'}\nGHL Tag: ${getActiveCounty().id}_vbp\nOwner: ${lead.owner||'Not found'}`;}
+  else if(ce){info=`Source: Code Enforcement — Corpus Christi\nViolation: ${lead.ce_reason||'—'}\nStatus: ${lead.ce_status||'—'}\nGHL Tag: ${getActiveCounty().id}_ce`;}
+  else if(lp){info=`Source: Lis Pendens (PublicSearch RP)\nAddress: ${lead.address||'—'}\nFiled: ${fmtDate(lead.date_filed)}\nGHL Tag: ${getActiveCounty().id}_lp\nNote: LP filings often precede NOF by weeks/months.`;}
+  else if(appt){info=`Source: Appointment of Substitute Trustee\nAddress: ${lead.address||'—'}\nFiled: ${fmtDate(lead.date_filed)}\nGHL Tag: ${getActiveCounty().id}_prefore\nNote: Filed 2-4 weeks before NOF — earliest signal.`;}
+  else{info=`Type: ${lead.type} · Score: ${lead.score}${tenureBonus>0?' (+'+tenureBonus+'pts tenure)':''}\n${lead.date_recorded?'Recorded: '+fmtDate(lead.date_recorded):'Filed: '+fmtDate(lead.date_filed)}\nGHL Tag: ${getActiveCounty().id}_lead\nAbsentee: ${lead.absentee?'Yes':'No'}\nMail: ${lead.mail_addr||'—'}`;if(lead.sale_date)info+=`\nSale Date: ${fmtDate(lead.sale_date)}`;if(appr)info+=`\nAppraised: $${appr.toLocaleString()}`;if(tenureYrs!=null)info+=`\nYrs Owned: ${tenureYrs} yrs (deed: ${fmtDate(lead.deed_date)})`;if(lastSale)info+=`\nLast Sale: ${lastSale}`;}
   document.getElementById('lead-info-grid').textContent=info;
   updateStats();
 }
@@ -1557,6 +1611,7 @@ async function enableBotOffer(){
 }
 
 function copyAddress(){const lead=allLeads.find(l=>l.doc_number===selectedDoc);if(!lead)return;const addressInput=document.getElementById('sf-address'),cityInput=document.getElementById('sf-city'),zipInput=document.getElementById('sf-zip');const addr=(addressInput&&addressInput.value.trim())||toTitle(lead.address||'');const city=(cityInput&&cityInput.value.trim())||toTitle(lead.city||'');const zip=(zipInput&&zipInput.value.trim())||lead.zip;navigator.clipboard.writeText(`${addr}, ${city} TX ${zip}`);toast('Address copied');}
+function copyMailAddress(){const lead=allLeads.find(l=>l.doc_number===selectedDoc);if(!lead||!lead.mail_addr)return;navigator.clipboard.writeText(lead.mail_addr);toast('Mailing address copied');}
 
 function openStreetView(){
   const lead=allLeads.find(l=>l.doc_number===selectedDoc);
@@ -1642,10 +1697,11 @@ async function pushGHL(lead,phone){
       }
     }catch(e){/* dedupe check is best-effort */}
     const vbp=isVBP(lead),stacked=isStacked(lead),ce=isCEOnly(lead),lp=isLP(lead),appt=isAppt(lead);const ghlTag=getGHLTag(lead);
-  // v4.2 fix: APPT leads must NOT get nueces_lead tag — it triggers wrong workflow
-  const baseTags=appt?['forewarn_searched']:['nueces_lead','forewarn_searched'];
+  // v4.2 fix: APPT leads must NOT get the base county_lead tag — it triggers wrong workflow
+  const cid=getActiveCounty().id;
+  const baseTags=appt?['forewarn_searched']:[cid+'_lead','forewarn_searched'];
   const tags=[...baseTags,ghlTag];
-  if(stacked){tags.push('nueces_stacked','nueces_vbp','nueces_ce');if(isVBPDangerous(lead))tags.push('ce_dangerous');}else if(vbp)tags.push('nueces_vbp');else if(ce){tags.push('nueces_ce');if(lead.flags?.includes('DANGEROUS PREMISES'))tags.push('ce_dangerous');}else if(lp)tags.push('nueces_lp');else if(appt){/* nueces_prefore already added via ghlTag above */}else{tags.push('nueces-contacted');if(lead.absentee)tags.push('absentee');if(lead.type==='TAX')tags.push('tax_foreclosure');if(lead.is_new)tags.push('new_lead');}if(isLongHeld(lead))tags.push('long_held');if(lead.tenure_years!=null&&lead.tenure_years<=4)tags.push('low_tenure_lead');
+  if(stacked){tags.push(cid+'_stacked',cid+'_vbp',cid+'_ce');if(isVBPDangerous(lead))tags.push('ce_dangerous');}else if(vbp)tags.push(cid+'_vbp');else if(ce){tags.push(cid+'_ce');if(lead.flags?.includes('DANGEROUS PREMISES'))tags.push('ce_dangerous');}else if(lp)tags.push(cid+'_lp');else if(appt){/* cid_prefore already added via ghlTag above */}else{tags.push(cid+'-contacted');if(lead.absentee)tags.push('absentee');if(lead.type==='TAX')tags.push('tax_foreclosure');if(lead.is_new)tags.push('new_lead');}if(isLongHeld(lead))tags.push('long_held');if(lead.tenure_years!=null&&lead.tenure_years<=4)tags.push('low_tenure_lead');
   // Bot-offer bracket, ported from bexar-leads 2026-08-20: primary path is
   // marking a lead (mao-mark-offer checkbox, only shown pre-push) BEFORE
   // pushing -- if marked, the range computed from the currently-open lead's
@@ -1723,7 +1779,7 @@ function toast(msg,type=false){const el=document.getElementById('toast');el.text
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/nueces-leads/sw.js').catch(e=>console.log('SW:',e));}
 setInterval(()=>fetchLeads(),15*60*1000);
 
-const DEFAULT_COUNTIES=[{id:'bexar',name:'Bexar County',label:'BEXAR·LEADS',url:'https://e4property.github.io/bexar-leads/records.json',ghlTag:'bexar_lead',color:'var(--blue)'},{id:'nueces',name:'Nueces County',label:'NUECES·LEADS',url:'https://e4property.github.io/nueces-leads/records.json',ghlTag:'nueces_lead',color:'var(--teal)'},{id:'guadalupe',name:'Guadalupe County',label:'GUADALUPE·LEADS',url:'https://e4property.github.io/guadalupe-leads/records.json',ghlTag:'guadalupe_lead',color:'var(--purple)'}];
+const DEFAULT_COUNTIES=[{id:'bexar',name:'Bexar County',label:'BEXAR·LEADS',url:'https://e4property.github.io/bexar-leads/records.json',ghlTag:'bexar_lead',color:'var(--blue)'},{id:'nueces',name:'Nueces County',label:'NUECES·LEADS',url:'https://e4property.github.io/nueces-leads/records.json',ghlTag:'nueces_lead',color:'var(--teal)'},{id:'travis',name:'Travis County',label:'TRAVIS·LEADS',url:'https://e4property.github.io/travis-leads/records.json',ghlTag:'travis_lead',color:'var(--red)'},{id:'wilson',name:'Wilson County',label:'WILSON·LEADS',url:'https://e4property.github.io/wilson-leads/records.json',ghlTag:'wilson_lead',color:'var(--amber)'},{id:'sanpatricio',name:'San Patricio County',label:'SAN PATRICIO·LEADS',url:'https://e4property.github.io/sanpatricio-leads/records.json',ghlTag:'sanpatricio_lead',color:'var(--teal)'},{id:'dallas',name:'Dallas County',label:'DALLAS·LEADS',url:'https://e4property.github.io/dallas-leads/records.json',ghlTag:'dallas_lead',color:'var(--green)'},{id:'guadalupe',name:'Guadalupe County',label:'GUADALUPE·LEADS',url:'https://e4property.github.io/guadalupe-leads/records.json',ghlTag:'guadalupe_lead',color:'var(--purple)'}];
 // Scoped per-site with SK (bl_v6/nl_v1/gl_v1) — see bexar-leads for why:
 // GitHub Pages serves all three county sites under the same
 // e4property.github.io origin, and localStorage is shared per-origin, not
@@ -1738,9 +1794,45 @@ function closeCountySwitcher(){const dd=document.getElementById('county-dropdown
 function closeOnOutside(e){const w=document.querySelector('.nav-logo');if(w&&!w.contains(e.target))closeCountySwitcher();}
 function renderCountyList(){const counties=getCounties();const active=getActiveCounty();const el=document.getElementById('county-list');if(!el)return;el.innerHTML=counties.map(c=>'<div onclick="setActiveCounty(\''+c.id+'\')" style="padding:9px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;border-left:3px solid '+(c.id===active.id?c.color:'transparent')+';background:'+(c.id===active.id?'var(--blue-bg)':'transparent')+'"><div style="width:7px;height:7px;border-radius:50%;background:'+c.color+';flex-shrink:0"></div><div><div style="font-size:12px;font-weight:500;color:var(--text)">'+c.name+'</div><div style="font-size:9px;color:var(--muted);font-family:\'DM Mono\',monospace">'+(c.id===active.id?'● Active':'Click to switch')+'</div></div>'+(c.id===active.id?'<span style="margin-left:auto;font-size:10px;color:var(--blue)">✓</span>':'')+'</div>').join('');}
 function initCountySwitcher(){const county=getActiveCounty();S.recordsUrl=county.url;}
-function openSettings(){document.getElementById('set-apikey').value=S.ghlApiKey||'';document.getElementById('set-locid').value=S.ghlLocationId||'UAOJlgeerLu3GChP9jDJ';document.getElementById('set-url').value=S.recordsUrl||REC_URL_DEFAULT;document.getElementById('set-ghtoken').value=S.ghToken||'';const ne=document.getElementById('set-nueces-url');if(ne){const counties=getCounties();const n=counties.find(c=>c.id==='nueces');if(n)ne.value=n.url||'';}document.getElementById('settings-modal').classList.add('open');}
+function resetBudget(){S.used=0;S.weekStart=Date.now();saveState();updateBudgetUI();const el=document.getElementById('fw-budget-display');if(el)el.textContent=`Used: 0 / 100 — reset ${new Date().toLocaleTimeString()}`;toast('ForeWarn counter reset to 0','ok');}
+async function reconcileJarvis(){
+  if(!S.ghlApiKey||!S.ghlLocationId){toast('Set your GHL API key + Location ID first','ok');return;}
+  const candidates=allLeads.filter(l=>{const ls=LS(l.doc_number);return ls.phone&&!ls.ghl_pushed;});
+  if(!candidates.length){toast('Nothing to check — every lead with a saved phone is already marked pushed','ok');return;}
+  const btn=document.getElementById('reconcile-btn');
+  const statusEl=document.getElementById('jarvis-reconcile-status');
+  if(btn){btn.disabled=true;btn.textContent='Checking…';}
+  let found=0,checked=0,errors=0;
+  for(const lead of candidates){
+    const ls=LS(lead.doc_number);
+    checked++;
+    if(statusEl)statusEl.textContent=`Checking ${checked}/${candidates.length}…`;
+    try{
+      const digits=(ls.phone||'').replace(/\D/g,'');
+      const res=await fetch(`https://services.leadconnectorhq.com/contacts/search/duplicate?locationId=${S.ghlLocationId}&number=${encodeURIComponent(digits)}`,{
+        headers:{'Authorization':'Bearer '+S.ghlApiKey,'Version':'2021-07-28','Accept':'application/json'}
+      });
+      if(res.status===200){
+        const data=await res.json();
+        const contactId=data.contact?.id||data.id;
+        if(contactId){
+          found++;
+          S.leads[lead.doc_number]=S.leads[lead.doc_number]||{};
+          Object.assign(S.leads[lead.doc_number],{ghl_pushed:true,ghlId:contactId});
+          writeBackToRepo(lead.doc_number,{ghl_pushed:true,ghl_pushed_at:new Date().toISOString(),ghl_id:contactId});
+        }
+      }
+    }catch(e){errors++;console.warn('reconcileJarvis:',lead.doc_number,e);}
+    await new Promise(r=>setTimeout(r,300));
+  }
+  saveState();updateAllCounts();renderList();
+  if(btn){btn.disabled=false;btn.textContent='Reconcile';}
+  if(statusEl)statusEl.textContent=`Checked ${checked}, corrected ${found}${errors?`, ${errors} errors`:''}`;
+  toast(`Reconcile done — ${found} lead(s) corrected to Pushed`,'ok');
+}
+function openSettings(){const el=document.getElementById('fw-budget-display');if(el)el.textContent=`Used: ${S.used} / 100`;document.getElementById('set-apikey').value=S.ghlApiKey||'';document.getElementById('set-locid').value=S.ghlLocationId||'UAOJlgeerLu3GChP9jDJ';document.getElementById('set-url').value=S.recordsUrl||REC_URL_DEFAULT;document.getElementById('set-ghtoken').value=S.ghToken||'';document.getElementById('settings-modal').classList.add('open');}
 function closeSettings(){document.getElementById('settings-modal').classList.remove('open');}
-function saveSettings(){S.ghlApiKey=document.getElementById('set-apikey').value.trim();S.ghlLocationId=document.getElementById('set-locid').value.trim();S.recordsUrl=document.getElementById('set-url').value.trim()||REC_URL_DEFAULT;S.ghToken=document.getElementById('set-ghtoken').value.trim();const ne=document.getElementById('set-nueces-url');if(ne&&ne.value.trim()){const counties=getCounties();const n=counties.find(c=>c.id==='nueces');if(n){n.url=ne.value.trim();saveCounties(counties);}}saveState();closeSettings();toast('Settings saved','ok');fetchLeads();}
+function saveSettings(){S.ghlApiKey=document.getElementById('set-apikey').value.trim();S.ghlLocationId=document.getElementById('set-locid').value.trim();S.recordsUrl=document.getElementById('set-url').value.trim()||REC_URL_DEFAULT;S.ghToken=document.getElementById('set-ghtoken').value.trim();saveState();closeSettings();toast('Settings saved','ok');fetchLeads();}
 init();
 </script>
 </body>
