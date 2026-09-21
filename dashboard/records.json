@@ -7020,7 +7020,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Harper Thomas L",
+    "owner": "",
     "address": "7942 ELK DR \nCORPUS CHRISTI, TX 78414",
     "city": "Corpus Christi",
     "zip": "78414",
@@ -7040,7 +7040,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": 30.8,
     "tenure_score_bonus": 15,
@@ -7056,7 +7058,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -7116,7 +7118,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Garcia Jose A",
+    "owner": "",
     "address": "6725 RHONDA DR \nCORPUS CHRISTI, TX 78412",
     "city": "Corpus Christi",
     "zip": "78412",
@@ -7136,7 +7138,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": 27.0,
     "tenure_score_bonus": 15,
@@ -7152,7 +7156,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -7165,7 +7169,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Vela Randy & Esmeralda L Vela",
+    "owner": "",
     "address": "305 SKIPPER LN \nCORPUS CHRISTI, TX 78418",
     "city": "Corpus Christi",
     "zip": "78418-2907",
@@ -7187,7 +7191,8 @@
     "score": 10,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": null,
@@ -7204,7 +7209,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -7312,7 +7317,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Branham Misti",
+    "owner": "",
     "address": "4421 WEISKOPF LN \nCORPUS CHRISTI, TX 78413",
     "city": "Corpus Christi",
     "zip": "78413-2139",
@@ -7332,7 +7337,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": 11.0,
     "tenure_score_bonus": 10,
@@ -7348,7 +7355,7 @@
     "opened_date": "",
     "dash_phone": "3615498845",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": true,
     "ghl_id": "Rq5hOKqCDAQYc6XDHIC9",
     "ghl_tag": "nueces_lead",
@@ -7504,7 +7511,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Portillo Jose H And",
+    "owner": "",
     "address": "701 CLARIDE \nCORPUS CHRISTI, TX 78418",
     "city": "Corpus Christi",
     "zip": "78418",
@@ -7524,7 +7531,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": 34.9,
     "tenure_score_bonus": 15,
@@ -7540,7 +7549,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -8287,7 +8296,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Southern Builders Encore Llc",
+    "owner": "",
     "address": "7034 BRANDON \nCORPUS CHRISTI, TX 78413",
     "city": "Corpus Christi",
     "zip": "78413-3784",
@@ -8307,7 +8316,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": 1.7,
     "tenure_score_bonus": 0,
@@ -8323,7 +8334,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -8334,7 +8345,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Casiano Edward Etux",
+    "owner": "",
     "address": "6602 LENS DR \nCORPUS CHRISTI, TX 78414",
     "city": "Corpus Christi",
     "zip": "78414",
@@ -8354,7 +8365,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": 20.6,
     "tenure_score_bonus": 15,
@@ -8370,7 +8383,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -8383,7 +8396,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Avichzer Bar Avraham",
+    "owner": "",
     "address": "7806 JIM WELLS DR \nCORPUS CHRISTI, TX 78413",
     "city": "Corpus Christi",
     "zip": "78414-5764",
@@ -8403,7 +8416,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": 0.7,
     "tenure_score_bonus": 0,
@@ -8419,7 +8434,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -8430,7 +8445,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Drtvestco Ccs Llc",
+    "owner": "",
     "address": "2233 ABETO DR \nCORPUS CHRISTI, TX 78414",
     "city": "Corpus Christi",
     "zip": "78414-3023",
@@ -8452,7 +8467,8 @@
     "score": 10,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": null,
@@ -8469,7 +8485,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -8480,7 +8496,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Araujo Ignacio & Wf Rosa Margarita",
+    "owner": "",
     "address": "3702 GRASSMERE DR \nCORPUS CHRISTI, TX 78415",
     "city": "Corpus Christi",
     "zip": "78415-3609",
@@ -8500,7 +8516,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": 7.9,
     "tenure_score_bonus": 5,
@@ -8516,7 +8534,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -8527,7 +8545,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Trevino Emma",
+    "owner": "",
     "address": "2106 KAREN DR \nCORPUS CHRISTI, TX 78416",
     "city": "Corpus Christi",
     "zip": "78467-1243",
@@ -8547,7 +8565,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": 5.9,
     "tenure_score_bonus": 5,
@@ -8563,7 +8583,7 @@
     "opened_date": "",
     "dash_phone": "3616584068",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": true,
     "ghl_id": "qrXBNVQ2AtxvrAR7gX9X",
     "ghl_tag": "nueces_lead",
@@ -8575,7 +8595,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Weil Linda H",
+    "owner": "",
     "address": "353 CATALINA PL \nCORPUS CHRISTI, TX 78411",
     "city": "Corpus Christi",
     "zip": "78411-1601",
@@ -8595,7 +8615,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": 16.5,
     "tenure_score_bonus": 15,
@@ -8611,7 +8633,7 @@
     "opened_date": "",
     "dash_phone": "3618533006",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": true,
     "ghl_id": "LImuQimEn4Fj025wNnCT",
     "ghl_tag": "nueces_lead",
@@ -8623,7 +8645,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Zambrano Michelle",
+    "owner": "",
     "address": "10304 N HARRINGTON  \nCORPUS CHRISTI, TX 78410",
     "city": "Corpus Christi",
     "zip": "77418-5961",
@@ -8645,7 +8667,8 @@
     "score": 9,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": null,
@@ -8662,7 +8685,7 @@
     "opened_date": "",
     "dash_phone": "9792218921",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": true,
     "ghl_id": "tpsaGvBea4WfPihSHuPD",
     "ghl_tag": "nueces_lead",
@@ -8873,7 +8896,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Martinez Maria T",
+    "owner": "",
     "address": "2618 LYNCH \nCORPUS CHRISTI, TX 78404",
     "city": "Corpus Christi",
     "zip": "78404",
@@ -8895,7 +8918,8 @@
     "score": 8,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": null,
@@ -8912,7 +8936,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -9069,7 +9093,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Salinas Robert Jr",
+    "owner": "",
     "address": "5508 SUNSET TRL \nROBSTOWN, TX 78380",
     "city": "Corpus Christi",
     "zip": "78380-9109",
@@ -9089,7 +9113,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 7,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-29T00:28:08.128174+00:00",
     "tenure_years": 4.1,
     "tenure_score_bonus": 0,
@@ -9105,7 +9131,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -9162,7 +9188,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Thurston John Raymond",
+    "owner": "",
     "address": "4334 BEAVER CREEK DR \nCORPUS CHRISTI, TX 78413",
     "city": "Corpus Christi",
     "zip": "78411",
@@ -9182,7 +9208,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-31T19:43:50.742019+00:00",
     "tenure_years": 37.9,
     "tenure_score_bonus": 15,
@@ -9198,7 +9226,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -9258,7 +9286,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Justice Donna A & Sp James K Justice",
+    "owner": "",
     "address": "3022 NEWPORT DR \nCORPUS CHRISTI, TX 78418",
     "city": "Corpus Christi",
     "zip": "78418-8016",
@@ -9278,7 +9306,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-08-31T19:43:50.742019+00:00",
     "tenure_years": 2.4,
     "tenure_score_bonus": 0,
@@ -9294,7 +9324,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -9351,7 +9381,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Room 502 Week 22 6109 Hwy 361 Port Aransas Tx 78373",
+    "owner": "",
     "address": "",
     "city": "Corpus Christi",
     "zip": "",
@@ -9373,7 +9403,8 @@
     "score": 4,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-02T18:52:14.025286+00:00",
     "tenure_years": null,
@@ -9390,7 +9421,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead"
@@ -9400,7 +9431,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Room 502 Week 21 6109 Hwy 361 Port Aransas Tx 78373",
+    "owner": "",
     "address": "",
     "city": "Corpus Christi",
     "zip": "",
@@ -9422,7 +9453,8 @@
     "score": 4,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-02T18:52:14.025286+00:00",
     "tenure_years": null,
@@ -9439,7 +9471,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead"
@@ -9449,7 +9481,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Room 403 Week 16 6109 Hwy 361 Port Aransas Tx 78373",
+    "owner": "",
     "address": "",
     "city": "Corpus Christi",
     "zip": "",
@@ -9471,7 +9503,8 @@
     "score": 4,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-02T18:52:14.025286+00:00",
     "tenure_years": null,
@@ -9488,7 +9521,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead"
@@ -9498,7 +9531,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Jonathan Meyers",
+    "owner": "",
     "address": "7117 CANO LN",
     "city": "CORPUS CHRISTI",
     "zip": "78414",
@@ -9520,7 +9553,8 @@
     "score": 10,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-02T18:52:14.025286+00:00",
     "tenure_years": null,
@@ -9537,7 +9571,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -9550,7 +9584,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Laporte Anthony Rene Jr",
+    "owner": "",
     "address": "2202 SAVOY \nCORPUS CHRISTI, TX 78414",
     "city": "Corpus Christi",
     "zip": "78414-2749",
@@ -9570,7 +9604,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-09-03T17:21:26.205622+00:00",
     "tenure_years": 3.0,
     "tenure_score_bonus": 0,
@@ -9586,7 +9622,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -9738,7 +9774,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Salas Christopher",
+    "owner": "",
     "address": "4554 SILVER HOLLOW DR \nCORPUS CHRISTI, TX 78413",
     "city": "Corpus Christi",
     "zip": "78413-5084",
@@ -9758,7 +9794,9 @@
     "duplicate": false,
     "is_new": false,
     "score": 10,
-    "flags": [],
+    "flags": [
+      "OWNER NEEDS VERIFICATION"
+    ],
     "run_ts": "2026-09-03T17:21:26.205622+00:00",
     "tenure_years": 8.3,
     "tenure_score_bonus": 5,
@@ -9774,7 +9812,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -10314,7 +10352,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Cn Ocean Drive Ii Lp",
+    "owner": "",
     "address": "4652 OCEAN DR \nCORPUS CHRISTI, TX 78412",
     "city": "Corpus Christi",
     "zip": "75057-3025",
@@ -10335,7 +10373,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-10T17:21:34.780606+00:00",
     "tenure_years": 5.7,
@@ -10352,7 +10391,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -10604,7 +10643,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Martinez Esther D",
+    "owner": "",
     "address": "11810 MESA DR \nCORPUS CHRISTI, TX 78410",
     "city": "Corpus Christi",
     "zip": "78410",
@@ -10625,7 +10664,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-10T17:21:34.780606+00:00",
     "tenure_years": 21.9,
@@ -10642,7 +10682,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -10655,7 +10695,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Gonzalez Rosa Imelda",
+    "owner": "",
     "address": "2818 KITCHENS \nCORPUS CHRISTI, TX 78405",
     "city": "Corpus Christi",
     "zip": "78405-2932",
@@ -10676,7 +10716,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 28.5,
@@ -10693,7 +10734,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -10753,7 +10794,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Greenway Development Inc",
+    "owner": "",
     "address": "13130 MC BURNETT DR \nCORPUS CHRISTI, TX 78410",
     "city": "Corpus Christi",
     "zip": "78417-3303",
@@ -10774,7 +10815,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 9.6,
@@ -10791,7 +10833,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11090,7 +11132,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Wilson Ralph O And Diosa L Wfe",
+    "owner": "",
     "address": "2301 STARGLOW DR \nCORPUS CHRISTI, TX 78414",
     "city": "Corpus Christi",
     "zip": "78414",
@@ -11111,7 +11153,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 20.2,
@@ -11128,7 +11171,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11141,7 +11184,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Cirlos Arturo Et Ux Gloria",
+    "owner": "",
     "address": "2102 MEADOWVIEW DR \nCORPUS CHRISTI, TX 78414",
     "city": "Corpus Christi",
     "zip": "78413",
@@ -11162,7 +11205,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 34.0,
@@ -11179,7 +11223,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11192,7 +11236,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Nares Alfred H & Wf Gloria Nares",
+    "owner": "",
     "address": "4822 TRINITY DR \nCORPUS CHRISTI, TX 78411",
     "city": "Corpus Christi",
     "zip": "78411-2842",
@@ -11213,7 +11257,8 @@
     "is_new": false,
     "score": 8,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 0.5,
@@ -11230,7 +11275,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11241,7 +11286,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Olivares Juan R",
+    "owner": "",
     "address": "4933 CHATFIELD RD \nCORPUS CHRISTI, TX 78413",
     "city": "Corpus Christi",
     "zip": "78463",
@@ -11262,7 +11307,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 25.5,
@@ -11279,7 +11325,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11292,7 +11338,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Cantu Daniel A",
+    "owner": "",
     "address": "1010 HERNDON \nCORPUS CHRISTI, TX 78411",
     "city": "Corpus Christi",
     "zip": "78411-2368",
@@ -11313,7 +11359,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 5.0,
@@ -11330,7 +11377,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11341,7 +11388,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Cane Emmanuel Y",
+    "owner": "",
     "address": "5926 GOLDEN CANYON DR \nCORPUS CHRISTI, TX 78414",
     "city": "Corpus Christi",
     "zip": "78414",
@@ -11363,7 +11410,8 @@
     "score": 8,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": null,
@@ -11380,7 +11428,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11393,7 +11441,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Mota Albino Jr Et Ux",
+    "owner": "",
     "address": "5726 CRESTFORD DR \nCORPUS CHRISTI, TX 78415",
     "city": "Corpus Christi",
     "zip": "78415",
@@ -11415,7 +11463,8 @@
     "score": 8,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": null,
@@ -11432,7 +11481,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11445,7 +11494,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Luevanos Randy And Lisa Saenz Wfe",
+    "owner": "",
     "address": "5029 EIDER DR \nCORPUS CHRISTI, TX 78413",
     "city": "Corpus Christi",
     "zip": "78413",
@@ -11466,7 +11515,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 21.2,
@@ -11483,7 +11533,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11496,7 +11546,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Guzman Raul Tober",
+    "owner": "",
     "address": "422 TROY DR \nCORPUS CHRISTI, TX 78412",
     "city": "Corpus Christi",
     "zip": "78412-2716",
@@ -11517,7 +11567,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 5.7,
@@ -11534,7 +11585,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11545,7 +11596,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Limerick Kellie S",
+    "owner": "",
     "address": "5914 O BRIAN DR \nCORPUS CHRISTI, TX 78413",
     "city": "Corpus Christi",
     "zip": "78413-3222",
@@ -11567,7 +11618,8 @@
     "score": 8,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": null,
@@ -11584,7 +11636,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11595,7 +11647,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Prewit Management Trust",
+    "owner": "",
     "address": "4417 DRIFTWOOD PL \nCORPUS CHRISTI, TX 78411",
     "city": "Corpus Christi",
     "zip": "78414-6331",
@@ -11617,7 +11669,8 @@
     "score": 10,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": null,
@@ -11634,7 +11687,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11645,7 +11698,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Bussell Kaitlyn E & Sps Panfila G Villegas",
+    "owner": "",
     "address": "505 FAIRFIELD DR \nCORPUS CHRISTI, TX 78412",
     "city": "Corpus Christi",
     "zip": "91945-3825",
@@ -11666,7 +11719,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 7.7,
@@ -11683,7 +11737,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11694,7 +11748,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Deleon Baltazar Jr",
+    "owner": "",
     "address": "4414 VESTAL \nCORPUS CHRISTI, TX 78416",
     "city": "Corpus Christi",
     "zip": "78416-1223",
@@ -11716,7 +11770,8 @@
     "score": 10,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": null,
@@ -11733,7 +11788,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11744,7 +11799,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Bollinger Kelly Nicole And",
+    "owner": "",
     "address": "534 VEGA DR \nCORPUS CHRISTI, TX 78418",
     "city": "Corpus Christi",
     "zip": "78418-3954",
@@ -11765,7 +11820,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 16.0,
@@ -11782,7 +11838,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11793,7 +11849,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Cane Emmanuel Y",
+    "owner": "",
     "address": "5926 GOLDEN CANYON DR \nCORPUS CHRISTI, TX 78414",
     "city": "Corpus Christi",
     "zip": "78414",
@@ -11815,7 +11871,8 @@
     "score": 8,
     "flags": [
       "AUCTION SOON",
-      "URGENT"
+      "URGENT",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": null,
@@ -11832,7 +11889,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11845,7 +11902,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Morales Frances A And",
+    "owner": "",
     "address": "3218 CASA ROSA DR \nCORPUS CHRISTI, TX 78411",
     "city": "Corpus Christi",
     "zip": "78411",
@@ -11866,7 +11923,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 22.5,
@@ -11883,7 +11941,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11896,7 +11954,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Cantu Daniel A",
+    "owner": "",
     "address": "1010 HERNDON \nCORPUS CHRISTI, TX 78411",
     "city": "Corpus Christi",
     "zip": "78411-2368",
@@ -11917,7 +11975,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 5.0,
@@ -11934,7 +11993,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11945,7 +12004,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Rodriguez Camelia",
+    "owner": "",
     "address": "5320 HITCHING POST LN \nCORPUS CHRISTI, TX 78415",
     "city": "Corpus Christi",
     "zip": "78415-3113",
@@ -11966,7 +12025,8 @@
     "is_new": false,
     "score": 8,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 0.5,
@@ -11983,7 +12043,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -11994,7 +12054,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "J & T Holdings Llc",
+    "owner": "",
     "address": "7810 ELK DR \nCORPUS CHRISTI, TX 78414",
     "city": "Corpus Christi",
     "zip": "78610-3918",
@@ -12015,7 +12075,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 14.7,
@@ -12032,7 +12093,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -12043,7 +12104,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Galvan Antonio Jr & Wf Dianna",
+    "owner": "",
     "address": "4113 ACUSHNET DR \nCORPUS CHRISTI, TX 78413",
     "city": "Corpus Christi",
     "zip": "78413-2001",
@@ -12064,7 +12125,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-14T18:55:51.657652+00:00",
     "tenure_years": 38.9,
@@ -12081,7 +12143,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
@@ -12533,7 +12595,7 @@
     "county": "nueces",
     "type": "NOF",
     "source": "publicsearch",
-    "owner": "Bramie Vapors Unlimited Llc",
+    "owner": "",
     "address": "15002 BOCA GRANDI DR \nCORPUS CHRISTI, TX 78418",
     "city": "Corpus Christi",
     "zip": "37046-1482",
@@ -12554,7 +12616,8 @@
     "is_new": false,
     "score": 10,
     "flags": [
-      "AUCTION SOON"
+      "AUCTION SOON",
+      "OWNER NEEDS VERIFICATION"
     ],
     "run_ts": "2026-09-16T14:28:14.631111+00:00",
     "tenure_years": 3.4,
@@ -12571,7 +12634,7 @@
     "opened_date": "",
     "dash_phone": "",
     "dash_dispo": "new",
-    "dash_notes": "",
+    "dash_notes": " [owner blanked 9/21 - wrong-lot enrichment bug, read doc to verify before contacting]",
     "ghl_pushed": false,
     "ghl_id": "",
     "ghl_tag": "nueces_lead",
