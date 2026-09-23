@@ -137,7 +137,7 @@ RECORDS_PATH      = Path("dashboard/records.json")
 LOOKUP_PATH       = Path("scraper/nueces_lookup.csv.gz")
 SCRAPE_DAYS       = 365   # extended for initial Nueces catchup        # rolling window
 AGED_DAYS         = 60        # leads older than this = aged
-ON_MARKET_STATUSES      = {"FOR_SALE", "PENDING", "FOR_RENT"}
+ON_MARKET_STATUSES      = {"FOR_SALE", "PENDING"}
 # 2026-08-21: bexar-leads hit a hard Realtor.com AuthenticationError wall
 # after ~27 consecutive homeharvest requests in one run that never
 # recovered. Keeping the combined per-run total (fetch + refresh) well
@@ -1490,7 +1490,7 @@ def fetch_on_market_status(records):
     for rec in candidates:
         full_addr = f"{rec['address']}, {rec.get('city', '')}, TX {rec.get('zip', '')}".strip(", ")
         try:
-            df = scrape_property(location=full_addr)
+            df = scrape_property(location=full_addr, listing_type=["for_sale", "pending"])
             now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             was_on_market = bool(rec.get("on_market"))
 
