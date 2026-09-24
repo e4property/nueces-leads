@@ -8,6 +8,50 @@ Enrichment: Nueces CAD appraisal roll lookup CSV (legal desc → address/owner/v
 GHL tags: nueces_lead, nueces_prefore, nueces_ce
 Scrape schedule: Mon/Thu 9am + 3pm CST (14:00 + 20:00 UTC)
 
+v2.4 changes (OCR fallback for leads with NO Parties/Address DOM data at all):
+  - The v1.7 note below ("no OCR needed here since this site's doc pages
+    expose real DOM text") was only true for ADDRESS -- confirmed live
+    2026-09-24 that a real chunk of the backlog (35 NOF leads as of this
+    writing, flagged INDEX_INCOMPLETE) has the county's own "Parties"
+    field say "No parties found" and "Property Address" say "No property
+    address found", with NEITHER ever recoverable from DOM no matter how
+    many times re-fetched -- the data genuinely isn't indexed, only
+    scanned into the document image. Hand-verified two real docs end to
+    end (download the doc-page's svg image, OCR with pytesseract, regex
+    the grantor name out) and got a clean owner name on both:
+      - doc 2026000512: prose "Notice of [Substitute] Trustee's Sale"
+        template -- "executed by ISMAEL DELGADO JR. AN UNMARRIED MAN,
+        securing..." matches the SAME grantor regex family already
+        proven on dallas-leads/scraper/fetch.py's ocr_doc(), verbatim,
+        zero changes.
+      - doc 2026000499: a second, more-structured "Deed of Trust
+        Information" labeled-table template -- "Grantor(s): Sergio
+        Humberto Esquivel and Mary Christie Esquivel..." AND a full
+        "Property Address: 7305 Westerly Court / Corpus Christi, TX
+        78414" -- richer than Dallas's format, but the default OCR page-
+        segmentation mode reads this table's label column and value
+        column as two separate blocks (all labels, then all values, in
+        matching order but nowhere near each other in the raw text) --
+        needed --psm 4 (assume a single column of variable-sized text)
+        to read it in real left-to-right row order. --psm 4 was re-
+        confirmed to still parse template #1 correctly too, so it's used
+        for both rather than keeping two OCR passes.
+  - New ocr_owner_from_doc() (below fetch_address_by_docnumber) — called
+    ONLY as the last resort inside main()'s Selenium fallback loop, only
+    when that loop already tried the roll lookup AND the doc-page DOM
+    address AND both came back empty, and only for type NOF/TAX (APPT's
+    hop-to-Deed-of-Trust path isn't covered by this yet — untested).
+    Capped at MAX_OCR_FETCH per run, independent of and additional to
+    MAX_DOC_FETCH, since it's a strictly-slower operation (image download
+    + OCR, not just a DOM read) than the address fallback it piggybacks on.
+  - fetch_address_by_docnumber() now returns a 4th value, `landed` — True
+    once the click-through to the doc's own page succeeded (independent
+    of whether an address was actually found on it) — so the OCR fallback
+    knows it's safe to look for a document image on the current page
+    instead of guessing from the (None, None, None) address result alone,
+    which was never able to distinguish "landed but blank" from "never
+    landed at all" (page load error / no-results / click failure).
+
 v1.7 changes (Deed of Trust hop for APPT address gap, closes the v1.4 TODO):
   - Live-verified 2026-08-23: an APPT doc's "Marginal References" section
     lists the Deed of Trust it's tied to (e.g. "Instrument Number: 2024012324
@@ -151,6 +195,12 @@ TODAY_NAIVE       = datetime.now()
 
 # Cap on Selenium doc-page fetches per run (address fallback) — keeps runtime bounded
 MAX_DOC_FETCH     = 60
+
+# Cap on OCR fallback attempts per run (image download + OCR is much slower
+# than a plain DOM read, and repeated rapid doc-image fetches in the same
+# session tripped a temporary block during manual testing 2026-09-24 — keep
+# this conservative until a real run's behavior is observed).
+MAX_OCR_FETCH     = 10
 
 # Coastal Corpus Christi ZIP codes — premium distress signal
 COASTAL_ZIPS = {
@@ -475,10 +525,17 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=
     v1.7: _hop=True marks this call as the recursive Deed-of-Trust follow-up
     (see below) so it can't chain a second time even if that doc also has a
     Marginal Reference of its own -- one hop only.
-    Returns (street, city, zip) or (None, None, None).
+
+    v2.4: now returns a 4th value, `landed` -- True once the click-through
+    to the doc's own page succeeded, regardless of whether an address was
+    found on it. Needed so callers (specifically the OCR fallback in
+    main()) can tell "landed on the doc page but it's genuinely blank"
+    apart from "never landed at all" -- the 3-tuple alone collapsed both
+    into the same (None, None, None).
+    Returns (street, city, zip, landed).
     """
     if not doc_number:
-        return None, None, None
+        return None, None, None, False
     # v1.7: end date capped 3 days behind real today -- confirmed live
     # 2026-08-23 that recordedDateRange's end date must not exceed the
     # site's own "Certified through" date (runs ~1-2 days behind real
@@ -517,7 +574,7 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=
         driver.get(url)
     except Exception as e:
         log.warning(f"  docnumber-fallback [{doc_number}]: page load failed: {e}")
-        return None, None, None
+        return None, None, None, False
 
     # v1.6: the v1.5 title-based gate was wrong. The page_source dumped on
     # that failure was a fully hydrated 100KB+ React page with GTM/analytics
@@ -541,7 +598,7 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=
         )
         if driver.find_elements(By.XPATH, "//h1[contains(text(),'No Results')]"):
             log.info(f"  docnumber-fallback [{doc_number}]: no results for this doc number")
-            return None, None, None
+            return None, None, None, False
     except Exception as e:
         log.warning(f"  docnumber-fallback [{doc_number}]: results table never appeared "
                     f"(url={driver.current_url!r}, title={driver.title!r}): {e}")
@@ -551,7 +608,7 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=
                         f"snippet={src[:800]!r}")
         except Exception as e2:
             log.warning(f"  docnumber-fallback [{doc_number}]: could not read page_source: {e2}")
-        return None, None, None
+        return None, None, None, False
     time.sleep(1)
 
     try:
@@ -566,12 +623,14 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=
     except Exception as e:
         log.warning(f"  docnumber-fallback [{doc_number}]: click-through to /doc/ failed "
                     f"(url={driver.current_url!r}): {e}")
-        return None, None, None
+        return None, None, None, False
     time.sleep(1.5)
 
+    # Landed on the real doc page from here on, whatever the address
+    # parse below finds (or doesn't) -- see v2.4 docstring note.
     result = _parse_address_from_current_page(driver, doc_number)
     if result != (None, None, None) or _hop:
-        return result
+        return result + (True,)
 
     # v1.7: APPT docs genuinely have no Property Address field of their own
     # (TX law doesn't require it for this doc type) -- fall back to the
@@ -582,11 +641,128 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=
     text_plain = re.sub(r"\s+", " ", text_plain)
     m = DEED_OF_TRUST_REF_RE.search(text_plain)
     if not m:
-        return None, None, None
+        return None, None, None, True
     dot_doc_number = m.group(1)
     log.info(f"  docnumber-fallback [{doc_number}]: no address on APPT page — "
              f"hopping to referenced Deed of Trust {dot_doc_number}")
     return fetch_address_by_docnumber(driver, dot_doc_number, department, timeout, _hop=True)
+
+
+# ── OCR fallback (v2.4) — last resort when Parties AND Property Address are ────
+# BOTH empty on the doc page's own DOM (confirmed real and not uncommon — see
+# the v2.4 changelog note at the top of this file). Ported from
+# dallas-leads/scraper/fetch.py's ocr_doc(), whose grantor regex family
+# matched a real Nueces "Notice of [Substitute] Trustee's Sale" doc verbatim
+# with zero changes. A second, more-structured "Deed of Trust Information"
+# labeled-table template needed --psm 4 (reads it in real row order instead
+# of all-labels-then-all-values) plus a paragraph-split extraction, and
+# happened to also leak a full Property Address that Dallas's format never
+# has — pulled here as a bonus when present.
+OCR_GRANTOR_EXECUTED_RE = re.compile(
+    r"executed\s+by\s+([A-Z][A-Za-z0-9 .,&'\-]{3,80}?),?\s+securing",
+    re.IGNORECASE,
+)
+OCR_GRANTOR_WITH_RE = re.compile(
+    r"with\s+([A-Z][A-Za-z0-9 .,&'\-]{3,80}?),?\s+grantor\(?s?\)?",
+    re.IGNORECASE,
+)
+OCR_GRANTOR_EXECUTED_PERIOD_RE = re.compile(
+    r"executed\s+by\s+([A-Z][A-Za-z0-9 .,&'\-]{3,80}?)\.\s"
+)
+OCR_ADDR_RE = re.compile(
+    r"Property\s*Address:\s*([0-9][A-Za-z0-9 .,#\-]{3,80}?)\s*\n\s*"
+    r"([A-Za-z .]+?),?\s*TX\.?\s*(\d{5})",
+    re.IGNORECASE,
+)
+OCR_KEYWORD_RE = re.compile(
+    r"grantor|mortgagor|trustor|executed by|whereas", re.IGNORECASE
+)
+
+
+def ocr_owner_from_doc(driver, doc_number):
+    """
+    Assumes the driver is ALREADY sitting on a doc page that just came back
+    with no address (i.e. call this only when fetch_address_by_docnumber's
+    `landed` was True but its address was empty). Finds the page's scanned
+    document image (an SVG <image> element, same as Dallas's site — NOT a
+    plain <img>), downloads it using the driver's own session cookies
+    (anonymous browsing was sufficient in manual testing 2026-09-24 — no
+    login step needed here, unlike Dallas), OCRs it, and tries to pull an
+    owner name (and, opportunistically, a property address) out of the
+    result.
+
+    Returns (owner, street, city, zip) — any/all of these may be "".
+    """
+    owner, street, city, zipc = "", "", "", ""
+    try:
+        img = None
+        for _ in range(4):
+            imgs = driver.find_elements(By.CSS_SELECTOR, "svg image")
+            if imgs:
+                img = imgs[0]
+                break
+            time.sleep(2)
+        if not img:
+            log.info(f"  ocr-fallback [{doc_number}]: no document image found on page")
+            return owner, street, city, zipc
+        img_url = img.get_attribute("href") or img.get_attribute("xlink:href")
+        if not img_url:
+            log.info(f"  ocr-fallback [{doc_number}]: image element had no href")
+            return owner, street, city, zipc
+
+        cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in driver.get_cookies())
+        req = urllib.request.Request(
+            img_url, headers={"User-Agent": "Mozilla/5.0", "Cookie": cookie_header}
+        )
+        with urllib.request.urlopen(req, timeout=30) as r:
+            image_bytes = r.read()
+
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp.write(image_bytes)
+            tmp_path = tmp.name
+        try:
+            import pytesseract
+            from PIL import Image
+            text = pytesseract.image_to_string(Image.open(tmp_path), config="--psm 4")
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+        m = (OCR_GRANTOR_EXECUTED_RE.search(text) or OCR_GRANTOR_WITH_RE.search(text)
+             or OCR_GRANTOR_EXECUTED_PERIOD_RE.search(text))
+        if m:
+            owner = m.group(1).strip().rstrip(".")
+        else:
+            # Labeled-table template: "Grantor(s):" is its own blank-line-
+            # separated paragraph once OCR'd with --psm 4 — confirmed live
+            # on doc 2026000499.
+            for para in re.split(r"\n\s*\n", text):
+                if re.match(r"\s*Grantor\(?s?\)?:", para, re.IGNORECASE):
+                    val = re.sub(r"^\s*Grantor\(?s?\)?:\s*", "", para, flags=re.IGNORECASE)
+                    owner = " ".join(val.split())
+                    break
+
+        addr_m = OCR_ADDR_RE.search(text)
+        if addr_m:
+            street = addr_m.group(1).strip()
+            city = addr_m.group(2).strip()
+            zipc = addr_m.group(3).strip()
+
+        if owner:
+            log.info(f"  ocr-fallback [{doc_number}]: owner recovered: {owner!r}")
+        if street:
+            log.info(f"  ocr-fallback [{doc_number}]: address recovered: {street!r}, {city!r} {zipc!r}")
+        if not owner and not street:
+            hit_lines = [ln.strip() for ln in text.splitlines() if OCR_KEYWORD_RE.search(ln)]
+            diag = f"keyword lines: {hit_lines}" if hit_lines else f"(no keyword lines — first 300 chars: {text[:300]!r})"
+            log.info(f"  ocr-fallback [{doc_number}]: OCR'd image but nothing matched. {diag}")
+    except Exception as e:
+        log.info(f"  ocr-fallback [{doc_number}]: failed (non-fatal): {type(e).__name__}: {e}")
+    return owner, street, city, zipc
+
 
 # ── Appraisal Roll Lookup ─────────────────────────────────────────────────────
 def normalize_owner(s):
@@ -1666,9 +1842,11 @@ def main():
         ]
         log.info(f"Selenium fallback: {len(still_missing)} leads still missing address (backlog + new)")
         fetched = 0
+        ocr_fetched = 0
+        ocr_attempts = 0
         for rec in still_missing[:MAX_DOC_FETCH]:
             department = DEPT_BY_TYPE.get(rec.get("type"), "RP")
-            street, city, zipc = fetch_address_by_docnumber(driver, rec["doc_number"], department)
+            street, city, zipc, landed = fetch_address_by_docnumber(driver, rec["doc_number"], department)
             if street:
                 rec["address"] = street.upper()
                 if city:
@@ -1697,12 +1875,36 @@ def main():
                 # lookup. Confirmed live: 2026000454/2026000520 land on
                 # unrelated real documents (a Transfer and a Deed) when
                 # searched directly on the county portal.
-                rec["flags"] = list(set(rec.get("flags", []) + ["INDEX_INCOMPLETE"]))
+                #
+                # v2.4: before giving up, try OCR'ing the doc's own scanned
+                # image -- only worth attempting if we actually landed on a
+                # real doc page (not a dead search/click), only for NOF/TAX
+                # (APPT's hop path isn't covered by this yet), and capped
+                # separately from MAX_DOC_FETCH since it's much slower.
+                ocr_owner = ocr_street = ""
+                if landed and rec.get("type") in ("NOF", "TAX") and ocr_attempts < MAX_OCR_FETCH:
+                    ocr_attempts += 1
+                    ocr_owner, ocr_street, ocr_city, ocr_zip = ocr_owner_from_doc(driver, rec["doc_number"])
+                    if ocr_owner:
+                        rec["owner"] = ocr_owner.title()
+                    if ocr_street and not rec.get("address"):
+                        rec["address"] = ocr_street.upper()
+                        if ocr_city:
+                            rec["city"] = ocr_city
+                        if ocr_zip:
+                            rec["zip"] = ocr_zip
+                        rec["is_coastal"] = is_coastal(rec.get("zip", ""))
+                    if ocr_owner or ocr_street:
+                        ocr_fetched += 1
+                        rec["score"] = score_record(rec)
+                    time.sleep(3)  # extra pacing around the image fetch — see MAX_OCR_FETCH note
+                if not ocr_owner and not ocr_street:
+                    rec["flags"] = list(set(rec.get("flags", []) + ["INDEX_INCOMPLETE"]))
             time.sleep(1)
         skipped = max(0, len(still_missing) - MAX_DOC_FETCH)
         log.info(
             f"Selenium fallback: {fetched}/{min(len(still_missing), MAX_DOC_FETCH)} "
-            f"addresses recovered from doc pages"
+            f"addresses recovered from doc pages, {ocr_fetched}/{ocr_attempts} OCR fallback attempts recovered something"
             + (f" ({skipped} deferred to next run — MAX_DOC_FETCH cap)" if skipped else "")
         )
 
