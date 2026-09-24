@@ -29,8 +29,11 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install Tesseract OCR
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
+
       - name: Install dependencies
-        run: pip install requests beautifulsoup4 lxml selenium webdriver-manager homeharvest
+        run: pip install requests beautifulsoup4 lxml selenium webdriver-manager homeharvest pytesseract pillow
 
       - name: Run Nueces scraper
         run: python scraper/fetch.py 2>&1 | tee /tmp/nueces.log
