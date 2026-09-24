@@ -105,6 +105,7 @@ v1.0 changes:
 
 import csv
 import gzip
+import html
 import json
 import logging
 import os
@@ -183,11 +184,32 @@ def is_coastal(zip_code):
 def normalize_legal(s):
     if not s:
         return ""
+    s = html.unescape(s)
     return re.sub(r"\s+", " ", s.upper().strip())
 
 # ── Legal description signature matching (v1.1) ───────────────────────────────
+# v2.2: raw PublicSearch legal-description text carries unescaped HTML
+# entities (e.g. "&AMP;" instead of "&") and at least one real abbreviation
+# variant missing its trailing letter ("BLOC" instead of "BLOCK" -- confirmed
+# live 2026-09-24 on a real KING'S CROSSING filing). Both silently corrupted
+# the subdivision-name signature (the stray "AMP"/"BLOC" tokens became part
+# of name_sig instead of being recognized/stripped), which broke otherwise-
+# exact matches against the appraisal roll -- confirmed live: "BELAIRE PARK-
+# LOTS 15 &AMP; 16, BLOCK 4" and "FLOUR BLUFF POINT-LOTS 5 &AMP; 6, BLOCK 4"
+# both went from a dead MISS to a clean roll match (real owner+address) once
+# the entity was unescaped before parsing.
+#
+# v2.3: bigger find, same investigation -- the appraisal roll's OWN
+# legal_desc field uses "BK" (no L) as a block abbreviation on 24,152 of
+# 156,240 rows (~15%), which BLOCK_NUM_RE never matched at all. This meant
+# _resolve_sig_candidates() silently rejected the one genuinely-correct
+# candidate as "no block match" on any lookup that landed on one of these
+# rows, even with a perfect subdivision+lot hit -- confirmed live on
+# "FLOUR BLUFF POINT LT 5 BK 4" (the real HAYNES ROGER M ET UX record),
+# which sat unmatched among 9 same-lot candidates in other blocks purely
+# because its own block never registered as a value to compare against.
 LOT_RE       = re.compile(r"\bL(?:OT[S]?|T)\.?\s*([0-9A-Z\-]+)")
-BLOCK_NUM_RE = re.compile(r"\bBL(?:OC)?K\.?\s*([0-9A-Z\-]+)")
+BLOCK_NUM_RE = re.compile(r"\b(?:BL(?:OCK|OC|K)|BK)\.?\s*([0-9A-Z\-]+)")
 SECTION_RE   = re.compile(r"\bSEC(?:TION)?\.?\s*([0-9A-Z\-]+)")
 
 LEGAL_NOISE_WORDS = {
@@ -204,7 +226,7 @@ def parse_legal_components(s):
     description text against the county roll's legal_desc field, which are
     almost never formatted identically even for the same parcel.
     """
-    s = (s or "").upper()
+    s = html.unescape(s or "").upper()
     s = re.sub(r"[^\w\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
 
@@ -772,6 +794,19 @@ def enrich_from_lookup(rec, lookup_tuple):
 
     # Coastal flag
     rec["is_coastal"] = is_coastal(rec.get("zip", ""))
+
+    # v2.2: INDEX_INCOMPLETE only ever gets ADDED (see the Selenium fallback
+    # loop below) when neither the roll lookup nor the live doc-number lookup
+    # found anything at the time it was set -- nothing previously cleared it
+    # on a later run where enrichment (here) succeeds after all, e.g. once
+    # the HTML-entity/BLOC parsing fix above lets a signature match land.
+    # Confirmed live 2026-09-24: doc 2026000520 has had a complete real
+    # owner+address+$293k equity estimate since 2026-08-29 but still showed
+    # the "NO INDEX DATA" warning on the dashboard because of this gap.
+    if rec.get("owner") or rec.get("address"):
+        flags = rec.get("flags") or []
+        if "INDEX_INCOMPLETE" in flags:
+            rec["flags"] = [f for f in flags if f != "INDEX_INCOMPLETE"]
 
     return rec
 
@@ -1643,6 +1678,9 @@ def main():
                 rec["is_coastal"] = is_coastal(rec.get("zip", ""))
                 rec["score"] = score_record(rec)
                 fetched += 1
+                flags = rec.get("flags") or []
+                if "INDEX_INCOMPLETE" in flags:
+                    rec["flags"] = [f for f in flags if f != "INDEX_INCOMPLETE"]
             elif not rec.get("owner"):
                 # 2026-09-05: this lead has now failed BOTH the tax-roll owner
                 # lookup AND the live doc-number address lookup, with no owner
