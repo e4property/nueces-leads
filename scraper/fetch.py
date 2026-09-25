@@ -585,7 +585,22 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=
     # searchOcrText=false mirror exactly what the site's own Quick Search
     # UI sends (confirmed by reading window.location.href after a real UI
     # search), rather than guessed-at params.
-    today_str = TODAY.strftime("%Y%m%d")
+    #
+    # v2.6: the v2.5 same-day end date was itself a bug, not a fix -- a run
+    # that starts right after UTC midnight has TODAY (datetime.now(utc))
+    # already on the next calendar day while Nueces's own "Certified
+    # through" date (Central Time) is still on the previous one. Confirmed
+    # live: the 2026-09-25T00:20 UTC run (still 2026-09-24 evening in
+    # Central) searched with end date 20260925 and got 0/60 -- one day
+    # past what the site had certified, reproducing the exact "end date
+    # exceeds Certified through -> No Results for everything" failure the
+    # original v1.7 note described. quickSearch itself is still the right
+    # mechanism (see above) -- this was purely the date math regressing
+    # when the v1.7 buffer got dropped. Back to a buffer, sized past the
+    # UTC/Central gap (up to ~6 hours) plus the certification lag observed
+    # varying between same-day and ~2 days behind across this file's
+    # history -- 2 days covers both with room to spare.
+    today_str = (TODAY - timedelta(days=2)).strftime("%Y%m%d")
     url = (
         f"{PUBLICSEARCH_BASE}/results"
         f"?department={department}"
