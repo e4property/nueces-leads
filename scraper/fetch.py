@@ -8,6 +8,35 @@ Enrichment: Nueces CAD appraisal roll lookup CSV (legal desc → address/owner/v
 GHL tags: nueces_lead, nueces_prefore, nueces_ce
 Scrape schedule: Mon/Thu 9am + 3pm CST (14:00 + 20:00 UTC)
 
+v2.5 changes (fixed the REAL reason OCR never ran -- address fallback was dead):
+  - The v2.4 OCR fallback shipped correctly but never actually fired in
+    production: audited real CI logs and found fetch_address_by_docnumber()
+    has recovered ZERO addresses (0/60, every single run) for at least the
+    last several days going back to 9/22 -- a silent, pre-existing failure
+    unrelated to the OCR work, but one that also blocks OCR since it only
+    runs after this function successfully lands on a doc page.
+  - Root cause: confirmed live against the real site that the v1.4
+    searchType=advancedSearch&documentNumberRange=[...] mechanism this
+    function has depended on since 8/20 is dead -- tested against doc
+    2024012324, a real, confirmed-existing Deed of Trust findable through
+    the site's own plain Quick Search box, and advancedSearch returns ZERO
+    results for it even with today's exact "Certified through" date (the
+    v1.7 "runs 1-2 days behind" assumption no longer holds either -- it's
+    same-day now). REPLACED with searchType=quickSearch&searchValue=
+    <doc_number> -- the exact mechanism the v1.4 note rejected back on
+    8/20 as "keyword search only, not exact match" turns out to work fine
+    for an exact document number today (10/10 vs 0/10 on the same 10
+    real CI-failing doc numbers, tested with fresh driver sessions).
+  - Also found, but NOT fully solved: the site appears to throttle
+    repeated searches within one browser session -- a clean 10/10 success
+    rate on isolated single-search sessions degraded noticeably once
+    requests started stacking up in the same testing window, even across
+    fresh Selenium driver instances later in that window. Bumped the
+    fallback loop's per-doc pacing from 1s to 4s as a hedge, but this
+    wasn't conclusively verified fixed -- watch real run logs (the
+    "Selenium fallback: N/M addresses recovered" line) rather than
+    assuming this number is now reliable.
+
 v2.4 changes (OCR fallback for leads with NO Parties/Address DOM data at all):
   - The v1.7 note below ("no OCR needed here since this site's doc pages
     expose real DOM text") was only true for ADDRESS -- confirmed live
@@ -536,31 +565,35 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=
     """
     if not doc_number:
         return None, None, None, False
-    # v1.7: end date capped 3 days behind real today -- confirmed live
-    # 2026-08-23 that recordedDateRange's end date must not exceed the
-    # site's own "Certified through" date (runs ~1-2 days behind real
-    # today) or the search returns "No Results Found" even for a document
-    # that unambiguously exists inside the range. Costs nothing here since
-    # every doc being looked up this way was already recorded in the past.
-    today_str = (TODAY - timedelta(days=3)).strftime("%Y%m%d")
-    # v1.4: was searchType=quickSearch&searchValue={doc_number} -- confirmed
-    # live 2026-08-20 via the site's own Advanced Search UI that quickSearch
-    # is a keyword/party-name search, NOT an exact document-number lookup;
-    # it returned "No Results" for every single doc number regardless of
-    # type or age, which is why this fallback had a 100% failure rate. The
-    # real mechanism (found in the "Single Document Numbers" Advanced
-    # Search field) is searchType=advancedSearch with documentNumberRange
-    # as a JSON array. Verified working end-to-end against a real doc
-    # (2026026641, DFLC INC -> BLACK ROBERT E) -- exact 1-result match,
-    # doc_number itself was never wrong here (unlike the analogous bug on
-    # Bexar), only the search URL was.
-    doc_json = urllib.parse.quote(f'["{doc_number}"]')
+    # v2.5: REPLACED the v1.4 advancedSearch+documentNumberRange mechanism --
+    # confirmed dead 2026-09-24. Audited every "no results" doc from the
+    # last several CI runs (0/60 addresses recovered, every run, going back
+    # to at least 9/22) against the live site directly: doc 2024012324
+    # (a real, confirmed-existing Deed of Trust -- SHAPIRO CASIMIERA ->
+    # DFLC INC, findable through the site's own normal Quick Search box)
+    # returns ZERO results through advancedSearch+documentNumberRange even
+    # with today's exact "Certified through" date (no lag at all right
+    # now -- the v1.7 "runs 1-2 days behind" assumption is also stale).
+    # The mechanism that DOES work is the one the v1.4 note above rejected
+    # -- searchType=quickSearch&searchValue=<doc_number> -- re-tested
+    # 2026-09-24 with FRESH driver sessions (no shared cookies/state) on
+    # 10 of the exact doc numbers a real CI run had just failed on: 10/10
+    # landed successfully, vs 0/10 for advancedSearch on the same docs in
+    # the same conditions. Whatever the v1.4 finding was measuring back on
+    # 8/20, quickSearch is unambiguously an exact document-number match
+    # today, not a fuzzy keyword search. keywordSearch=false and
+    # searchOcrText=false mirror exactly what the site's own Quick Search
+    # UI sends (confirmed by reading window.location.href after a real UI
+    # search), rather than guessed-at params.
+    today_str = TODAY.strftime("%Y%m%d")
     url = (
         f"{PUBLICSEARCH_BASE}/results"
         f"?department={department}"
-        f"&documentNumberRange={doc_json}"
+        f"&keywordSearch=false"
         f"&recordedDateRange=18000101%2C{today_str}"
-        f"&searchType=advancedSearch"
+        f"&searchOcrText=false"
+        f"&searchType=quickSearch"
+        f"&searchValue={doc_number}"
     )
     # v1.5 diagnostics: the v1.4 fix was verified end-to-end in an
     # interactive browser but still failed 100% of the time in the actual
@@ -1900,7 +1933,16 @@ def main():
                     time.sleep(3)  # extra pacing around the image fetch — see MAX_OCR_FETCH note
                 if not ocr_owner and not ocr_street:
                     rec["flags"] = list(set(rec.get("flags", []) + ["INDEX_INCOMPLETE"]))
-            time.sleep(1)
+            # v2.5: bumped from 1s -- live testing 2026-09-24 found the site
+            # throttles repeated searches within the same browser session
+            # (a clean 10/10 success rate on isolated single-search sessions
+            # degraded within the same testing window once requests started
+            # stacking up), though the exact threshold/window wasn't fully
+            # pinned down. This is a hedge, not a proven fix -- the real
+            # read on whether it's enough comes from watching real run logs,
+            # not more manual probing (each probe adds to the same volume
+            # that seems to trigger it).
+            time.sleep(4)
         skipped = max(0, len(still_missing) - MAX_DOC_FETCH)
         log.info(
             f"Selenium fallback: {fetched}/{min(len(still_missing), MAX_DOC_FETCH)} "
