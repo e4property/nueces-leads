@@ -432,39 +432,16 @@ def auction_passed(sale_date_str):
         pass
     return False
 
-# v2.2: "if we haven't worked them by now, it's too late" -- user's own
-# words, 2026-08-26, after having to manually purge the same unworked 9/1
-# batch twice because the scraper kept re-discovering and re-adding it on
-# every run (removing a record from records.json doesn't stop it matching
-# the live county query again next time). This makes that a standing rule
-# instead of a repeated manual chore: an unworked lead within this many
-# days of its own auction is dead the same way a past auction is.
-TOO_SOON_TO_WORK_DAYS = 5
-
-def too_soon_to_work(sale_date_str):
-    # 2026-09-30: was comparing raw datetimes (dt - TODAY_NAIVE).days instead
-    # of calendar dates -- confirmed live this purged the ENTIRE 10/6/2026
-    # auction wave on 9/30 (still 6 calendar days out) because time-of-day
-    # truncation made the raw timedelta come out to 5 days, tripping this
-    # function's own <= 5 threshold a full day early. Same class of bug
-    # auction_passed() elsewhere in this file already guards against with an
-    # explicit calendar-date-only comparison -- this function never got that
-    # fix. Purging is NOT cosmetic here: purge_past_auctions() deletes these
-    # records outright (not just hides them), so this bug was destroying
-    # real, high-urgency leads a day before it should have started to.
-    if not sale_date_str:
-        return False
-    try:
-        from zoneinfo import ZoneInfo
-        parts = sale_date_str.strip().split("/")
-        if len(parts) == 3:
-            sale_dt = datetime(int(parts[2]), int(parts[0]), int(parts[1])).date()
-            today_central = datetime.now(ZoneInfo("America/Chicago")).date()
-            days_until = (sale_dt - today_central).days
-            return 0 <= days_until <= TOO_SOON_TO_WORK_DAYS
-    except Exception:
-        pass
-    return False
+# v2.2 added a TOO_SOON_TO_WORK_DAYS auto-purge here ("if we haven't worked
+# them by now, it's too late" -- user's own words, 2026-08-26). REMOVED
+# 2026-09-30 per explicit updated instruction: leads should not be purged
+# until the day after their own auction date (auction_passed() above
+# already does exactly that), not some days-before-auction cutoff. A
+# calendar-date bug in this function's threshold check had also just
+# deleted an entire county's near-term auction wave a day early, which is
+# what prompted revisiting the policy itself rather than just the bug.
+# Dashboard cleanup of unworked near-auction leads is now a manual task,
+# not an automatic one -- see [[feedback_no_auto_purge_before_auction]].
 
 def get_driver():
     opts = Options()
@@ -1599,10 +1576,12 @@ def purge_past_auctions(records):
         if lead_type in ("CE", "APPT") or rec.get("ghl_pushed") or rec.get("dash_phone"):
             kept.append(rec)
             continue
-        # NOF/TAX: purge if auction passed, or too close to work at all
+        # NOF/TAX: purge only once the auction date itself has passed --
+        # NOT some days-before-auction cutoff (removed 2026-09-30, see the
+        # note above the now-deleted too_soon_to_work()).
         if lead_type in ("NOF", "TAX"):
             sd = rec.get("sale_date", "")
-            if sd and (auction_passed(sd) or too_soon_to_work(sd)):
+            if sd and auction_passed(sd):
                 continue
             # Also purge stale leads with no sale date > 180 days
             if not sd and not filed_within_window(rec.get("date_filed", ""), 180):
