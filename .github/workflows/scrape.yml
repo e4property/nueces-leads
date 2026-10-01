@@ -36,6 +36,9 @@ jobs:
         run: pip install requests beautifulsoup4 lxml selenium webdriver-manager homeharvest pytesseract pillow
 
       - name: Run Nueces scraper
+        env:
+          CLERK_EMAIL: "${{ secrets.CLERK_EMAIL }}"
+          CLERK_PASSWORD: "${{ secrets.CLERK_PASSWORD }}"
         run: python scraper/fetch.py 2>&1 | tee /tmp/nueces.log
         continue-on-error: false
 
