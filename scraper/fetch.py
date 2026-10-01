@@ -622,6 +622,60 @@ def login_publicsearch(driver):
         return False
 
 
+# v2.9: the real root cause of the 0/60 docnumber-fallback and the main
+# FC/RP pagination stalling at page 1 despite large total-result counts --
+# found by reading a competitor's working Bexar scraper on GitHub
+# (Sellmyhousefast247/Bexar-leads, same PublicSearch platform). PublicSearch
+# is a React SPA: navigating from one results URL to another can show a
+# BRIEF transient state (zero rows, sometimes even a flash of "No Results")
+# before the real async data finishes loading, especially under back-to-
+# back automated navigations with no human-speed pauses between them. This
+# file's wait logic (like login_publicsearch did independently) trusted the
+# FIRST signal it saw -- that transient flash reads identically to a
+# genuine empty result, so it was concluding "no results" for docs/pages
+# that actually had data. Login was a red herring: re-tested live
+# 2026-10-01 and login succeeded but the very next lookup still failed the
+# same way, which only makes sense if the real bug is this race, not auth.
+# Fix, ported from that competitor's code: (1) hard-reset to about:blank
+# before each navigation so the SPA's client-side router can't carry state
+# across the "navigation" the way it might with a same-origin soft route
+# change, (2) don't trust a result until the table's row count has been
+# stable (unchanged) for >=600ms, (3) only trust an empty result once BOTH
+# "No Results Found" AND "Suggestions:" are present -- live-verified
+# 2026-10-01 that a genuine empty page always shows both together here.
+_RESULTS_STABLE_WINDOW = 0.6
+
+
+def _wait_for_stable_results(driver, timeout=40):
+    """Returns "rows", "empty", or "timeout" -- see v2.9 note above."""
+    deadline = time.time() + timeout
+    last_count = -1
+    stable_since = None
+    while time.time() < deadline:
+        try:
+            count = len(driver.find_elements(By.XPATH, "//table//tbody//tr"))
+        except Exception:
+            count = 0
+        if count > 0:
+            if count == last_count:
+                if stable_since is not None and time.time() - stable_since >= _RESULTS_STABLE_WINDOW:
+                    return "rows"
+            else:
+                last_count = count
+                stable_since = time.time()
+        else:
+            last_count = -1
+            stable_since = None
+            try:
+                body_text = driver.find_element(By.TAG_NAME, "body").text
+            except Exception:
+                body_text = ""
+            if "No Results Found" in body_text and "Suggestions:" in body_text:
+                return "empty"
+        time.sleep(0.3)
+    return "timeout"
+
+
 def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=False):
     """
     v1.3: address fallback for the BACKLOG, not just this run's new leads.
@@ -703,37 +757,22 @@ def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=
     # whole function, which told us nothing about where it was actually
     # breaking.
     try:
+        driver.get("about:blank")
+    except Exception:
+        pass
+    try:
         driver.get(url)
     except Exception as e:
         log.warning(f"  docnumber-fallback [{doc_number}]: page load failed: {e}")
         return None, None, None, False
 
-    # v1.6: the v1.5 title-based gate was wrong. The page_source dumped on
-    # that failure was a fully hydrated 100KB+ React page with GTM/analytics
-    # scripts loaded -- not a stuck loading shell. document.title just never
-    # updates in headless mode (likely a visibility/focus-gated title effect
-    # in the SPA), so gating on it timed out 100% of the time even when the
-    # real results were already in the DOM. Wait on the table directly
-    # instead -- that's the thing we actually need.
-    # v1.9: that still didn't explain persistent timeouts even after v1.7's
-    # date fix -- live-verified 2026-08-23 in an interactive (non-headless)
-    # session that a genuine "No Results Found" page renders its own <h1>
-    # with NO stable class (React CSS-in-JS hash like "css-z524vz", changes
-    # per build), so it never matched a class-based no-results selector and
-    # the wait spun for the FULL timeout on every zero-match lookup instead
-    # of failing fast. XPath text match catches it regardless of class.
-    try:
-        WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located(
-                (By.XPATH, "//table//tr/td | //h1[contains(text(),'No Results')]")
-            )
-        )
-        if driver.find_elements(By.XPATH, "//h1[contains(text(),'No Results')]"):
-            log.info(f"  docnumber-fallback [{doc_number}]: no results for this doc number")
-            return None, None, None, False
-    except Exception as e:
+    state = _wait_for_stable_results(driver, timeout)
+    if state == "empty":
+        log.info(f"  docnumber-fallback [{doc_number}]: no results for this doc number")
+        return None, None, None, False
+    elif state == "timeout":
         log.warning(f"  docnumber-fallback [{doc_number}]: results table never appeared "
-                    f"(url={driver.current_url!r}, title={driver.title!r}): {e}")
+                    f"(url={driver.current_url!r}, title={driver.title!r})")
         try:
             src = driver.page_source
             log.warning(f"  docnumber-fallback [{doc_number}]: page_source len={len(src)} "
@@ -1307,36 +1346,40 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
             )
         log.info(f"  offset={offset}")
 
+        # v2.9: about:blank reset + stability-based wait replaces the old
+        # first-signal check -- see _wait_for_stable_results docstring.
+        # Confirmed live 2026-10-01 this exact department/offset mechanism
+        # was hitting a "Results: 50 of 816 results" full page-1 (proving
+        # real data exists) immediately followed by an offset=50 request
+        # that the old check read as genuine "No Results" every single run
+        # for a full week -- the same SPA-transition race as
+        # fetch_address_by_docnumber, not a true end-of-data condition.
+        try:
+            driver.get("about:blank")
+        except Exception:
+            pass
         try:
             driver.get(url)
-            # v1.9: the .no-results/[class*='no-result'] selector never
-            # matched anything -- live-verified 2026-08-23 that a genuine
-            # "No Results Found" page renders an <h1> with a React CSS-in-JS
-            # hashed class (e.g. "css-z524vz"), not a stable "no-result"
-            # class name. That's why this wait timed out on EVERY zero-match
-            # search instead of the "no results" check below ever running --
-            # not a bot-detection or headless-only issue as it first looked.
-            WebDriverWait(driver, 30).until(
-                EC.presence_of_element_located(
-                    (By.XPATH, "//table//tr/td | //h1[contains(text(),'No Results')]")
-                )
-            )
-            time.sleep(2)
         except Exception as e:
-            # v1.8: dump what's actually on the page when this times out --
-            # every prior "Timeout offset=X" log has been a blank "Message: "
-            # with no way to tell whether it's a slow real page, a genuine
-            # "No Results" state that just doesn't match either selector, or
-            # a bot-challenge interstitial (Cloudflare etc.) that headless
-            # Chrome hits but an interactive session doesn't. Same diagnostic
-            # pattern already proven useful on fetch_address_by_docnumber.
+            log.warning(f"  Page load failed offset={offset}: {e}")
+            consecutive_empty += 1
+            if consecutive_empty >= 3:
+                break
+            time.sleep(5)
+            continue
+
+        state = _wait_for_stable_results(driver, 30)
+        if state == "empty":
+            log.info(f"  No results — stopping")
+            break
+        elif state == "timeout":
             try:
                 src = driver.page_source
                 log.warning(f"  Timeout offset={offset} (url={driver.current_url!r}, "
-                            f"title={driver.title!r}): {e} | page_source len={len(src)} "
+                            f"title={driver.title!r}) | page_source len={len(src)} "
                             f"snippet={src[:600]!r}")
             except Exception as e2:
-                log.warning(f"  Timeout offset={offset}: {e} | could not read page_source: {e2}")
+                log.warning(f"  Timeout offset={offset}: could not read page_source: {e2}")
             consecutive_empty += 1
             if consecutive_empty >= 3:
                 break
@@ -1344,31 +1387,7 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
             continue
 
         src = driver.page_source
-
-        # 2026-08-28: `"no results" in src.lower()` is a substring match
-        # against the ENTIRE raw page source, not a scoped element check --
-        # that phrase sits in the page's static/hidden markup (help text, a
-        # collapsed "No Results" container) on every load, results or not.
-        # The WebDriverWait above already correctly distinguishes real rows
-        # from a genuine No-Results state via a scoped h1 check -- but this
-        # second, unscoped check ran independently afterward and could
-        # false-positive even on a page WITH real rows, wrongly stopping the
-        # scrape. Confirmed as the exact same bug live in bexar-leads,
-        # silently dropping 34 of 53 real NOF filings in one day. Only trust
-        # "no results" here if there's truly no data row AND a genuine
-        # No-Results heading is present.
         rows = re.findall(r"<tr[^>]*>(.*?)</tr>", src, re.DOTALL | re.IGNORECASE)
-        data_rows_present = any(
-            not re.search(r"<th|thead|DOC.TYPE|RECORDED|GRANTOR|GRANTEE|PROPERTY", row, re.IGNORECASE)
-            for row in rows
-        )
-        if not data_rows_present:
-            if driver.find_elements(By.XPATH, "//h1[contains(text(),'No Results')]"):
-                log.info(f"  No results — stopping")
-                break
-            time.sleep(3)
-            src = driver.page_source
-            rows = re.findall(r"<tr[^>]*>(.*?)</tr>", src, re.DOTALL | re.IGNORECASE)
 
         m = re.search(r"(\d[\d,]*)\s*of\s*(\d[\d,]*)\s*results?", src, re.IGNORECASE)
         if m:
@@ -1899,6 +1918,7 @@ def main():
     # ── Selenium driver ───────────────────────────────────────────────────────
     log.info("Starting WebDriver...")
     driver = get_driver()
+    fallback_driver = None
 
     all_new = []
 
@@ -1965,10 +1985,18 @@ def main():
                 enriched += 1
         log.info(f"Roll enrichment: {enriched}/{len(all_new)} new-lead addresses filled")
 
-        # v2.7: log in before the quickSearch-dependent fallback loop below --
-        # see this file's v2.7 changelog note and login_publicsearch() docstring.
-        # Main NOF/APPT scrape above is done by now, so this can't affect it.
-        if not login_publicsearch(driver):
+        # v2.8: logging in on the SAME driver that just ran the full main
+        # NOF/APPT chunked scrape (100+ prior requests) did NOT fix anything --
+        # confirmed live 2026-10-01: "PublicSearch login OK" logged, then the
+        # very first quickSearch lookup right after still came back "no
+        # results" for a doc independently confirmed to have a real result.
+        # Whatever the site is tracking (session/cookie/fingerprint), it isn't
+        # reset by authenticating mid-session. bexar-leads' working version
+        # never has this problem because it never shares a driver this way --
+        # its doc-detail fetch gets its OWN fresh driver, logged in before
+        # that session has made a single other request. Matching that here.
+        fallback_driver = get_driver()
+        if not login_publicsearch(fallback_driver):
             log.warning("Address fallback: PublicSearch login failed or was skipped — quickSearch lookups will likely keep failing")
 
         # ── Selenium fallback: any lead still missing address after roll match ──
@@ -1986,7 +2014,7 @@ def main():
         ocr_attempts = 0
         for rec in still_missing[:MAX_DOC_FETCH]:
             department = DEPT_BY_TYPE.get(rec.get("type"), "RP")
-            street, city, zipc, landed = fetch_address_by_docnumber(driver, rec["doc_number"], department)
+            street, city, zipc, landed = fetch_address_by_docnumber(fallback_driver, rec["doc_number"], department)
             if street:
                 rec["address"] = street.upper()
                 if city:
@@ -2058,6 +2086,11 @@ def main():
         )
 
     finally:
+        try:
+            if fallback_driver is not None:
+                fallback_driver.quit()
+        except Exception:
+            pass
         try:
             driver.quit()
         except Exception:
