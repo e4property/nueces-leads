@@ -1314,21 +1314,35 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
             # returned zero for. Live-verified here too: the county site
             # shows 140 real FORECLOSURE NOTICE records recorded in the last
             # ~2 months via recordedDateRange, while this scraper had 0 NOF
-            # records captured at all using instrumentDateRange. Switched to
-            # the field actually proven to work; end date no longer needs to
-            # extend into the future since recorded dates are never forward-
-            # dated (they're always <= today).
-            end_str = TODAY.strftime("%Y%m%d")
+            # records captured at all using instrumentDateRange (THIS WAS
+            # UNDER advancedSearch -- see v2.10 below, that part of the
+            # finding doesn't carry over to quickSearch).
+            #
+            # v2.10 (2026-10-01): the real, root-cause fix for FC's "0 new
+            # records" every run this week. Xavi demonstrated his own manual
+            # search live -- department=FC, searchType=quickSearch (NOT
+            # advancedSearch), instrumentDateRange (NOT recordedDateRange),
+            # no docTypes/searchValue -- and it returned 835 real results
+            # including a lead recorded THAT DAY. The exact same URL shape
+            # this file has been building (advancedSearch+recordedDateRange)
+            # independently confirmed dead live in a browser the same night
+            # (genuine "No Results Found" for a full-year window, zero
+            # tables in the DOM) -- this was never a race condition or a
+            # session/bot issue, the mechanism itself was simply wrong.
+            # instrumentDateRange's end bound needs to extend into the
+            # future (same requirement already documented on bexar-leads'
+            # analogous doc-number lookup) -- 60 days is a safe margin.
+            end_str = (TODAY + timedelta(days=60)).strftime("%Y%m%d")
             url = (
                 f"{PUBLICSEARCH_BASE}/results"
                 f"?department=FC"
-                f"&recordedDateRange={cutoff}%2C{end_str}"
+                f"&instrumentDateRange={cutoff}%2C{end_str}"
                 f"&keywordSearch=false"
                 f"&limit=50"
                 f"&offset={offset}"
                 f"&sort=desc"
                 f"&sortBy=recordedDate"
-                f"&searchType=advancedSearch"
+                f"&searchType=quickSearch"
             )
         else:
             end_str = (TODAY - timedelta(days=3)).strftime("%Y%m%d")
