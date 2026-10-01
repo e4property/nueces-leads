@@ -1305,82 +1305,95 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
         if page_num > MAX_PAGES:
             log.warning(f"  Hit MAX_PAGES={MAX_PAGES} — stopping, rest deferred to next run")
             break
-        if department == "FC":
-            # 2026-08-28: instrumentDateRange started returning
-            # inconsistent/incomplete results for this department --
-            # confirmed the identical bug live in bexar-leads (same
-            # PublicSearch platform), where recordedDateRange correctly
-            # returned all real records for a window that instrumentDateRange
-            # returned zero for. Live-verified here too: the county site
-            # shows 140 real FORECLOSURE NOTICE records recorded in the last
-            # ~2 months via recordedDateRange, while this scraper had 0 NOF
-            # records captured at all using instrumentDateRange (THIS WAS
-            # UNDER advancedSearch -- see v2.10 below, that part of the
-            # finding doesn't carry over to quickSearch).
-            #
-            # v2.10 (2026-10-01): the real, root-cause fix for FC's "0 new
-            # records" every run this week. Xavi demonstrated his own manual
-            # search live -- department=FC, searchType=quickSearch (NOT
-            # advancedSearch), instrumentDateRange (NOT recordedDateRange),
-            # no docTypes/searchValue -- and it returned 835 real results
-            # including a lead recorded THAT DAY. The exact same URL shape
-            # this file has been building (advancedSearch+recordedDateRange)
-            # independently confirmed dead live in a browser the same night
-            # (genuine "No Results Found" for a full-year window, zero
-            # tables in the DOM) -- this was never a race condition or a
-            # session/bot issue, the mechanism itself was simply wrong.
-            # instrumentDateRange's end bound needs to extend into the
-            # future (same requirement already documented on bexar-leads'
-            # analogous doc-number lookup) -- 60 days is a safe margin.
-            end_str = (TODAY + timedelta(days=60)).strftime("%Y%m%d")
-            url = (
-                f"{PUBLICSEARCH_BASE}/results"
-                f"?department=FC"
-                f"&instrumentDateRange={cutoff}%2C{end_str}"
-                f"&keywordSearch=false"
-                f"&limit=50"
-                f"&offset={offset}"
-                f"&sort=desc"
-                f"&sortBy=recordedDate"
-                f"&searchType=quickSearch"
-            )
-        else:
-            end_str = (TODAY - timedelta(days=3)).strftime("%Y%m%d")
-            url = (
-                f"{PUBLICSEARCH_BASE}/results"
-                f"?department={department}"
-                f"&docTypes={doc_types}"
-                f"&recordedDateRange={cutoff}%2C{end_str}"
-                f"&keywordSearch=false"
-                f"&limit=50"
-                f"&offset={offset}"
-                f"&sort=desc"
-                f"&sortBy=recordedDate"
-                f"&searchType=advancedSearch"
-            )
-        log.info(f"  offset={offset}")
-
-        # v2.9: about:blank reset + stability-based wait replaces the old
-        # first-signal check -- see _wait_for_stable_results docstring.
-        # Confirmed live 2026-10-01 this exact department/offset mechanism
-        # was hitting a "Results: 50 of 816 results" full page-1 (proving
-        # real data exists) immediately followed by an offset=50 request
-        # that the old check read as genuine "No Results" every single run
-        # for a full week -- the same SPA-transition race as
-        # fetch_address_by_docnumber, not a true end-of-data condition.
-        try:
-            driver.get("about:blank")
-        except Exception:
-            pass
-        try:
-            driver.get(url)
-        except Exception as e:
-            log.warning(f"  Page load failed offset={offset}: {e}")
-            consecutive_empty += 1
-            if consecutive_empty >= 3:
+        # v2.11 (2026-10-01): the REAL fix for FC's page-2+ stall, found and
+        # verified live on bexar-leads/tarrant-leads the same night. A direct
+        # driver.get() to a non-zero-offset URL gets served a genuine (not
+        # transient) "No Results Found" decoy page -- confirmed with the
+        # strict both-markers check in _wait_for_stable_results, so v2.9's
+        # "SPA-transition race" theory below was itself wrong, not just the
+        # old first-signal check. Clicking the actual pagination button on
+        # the already-loaded page works every time instead -- verified live
+        # on THIS tenant specifically. Only wired up for FC (the mechanism
+        # already proven correct for page 1); RP/APPNMT still uses the old,
+        # separately-broken advancedSearch path untouched tonight -- not
+        # guessing a fix for a mechanism that was never verified working.
+        if department == "FC" and page_num > 1:
+            try:
+                next_btn = driver.find_element(By.CSS_SELECTOR, "button[aria-label='next page']")
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", next_btn)
+                next_btn.click()
+            except Exception as e:
+                log.info(f"  Next-page button missing/unclickable: {e} — treating as end of results")
                 break
-            time.sleep(5)
-            continue
+        else:
+            if department == "FC":
+                # 2026-08-28: instrumentDateRange started returning
+                # inconsistent/incomplete results for this department --
+                # confirmed the identical bug live in bexar-leads (same
+                # PublicSearch platform), where recordedDateRange correctly
+                # returned all real records for a window that instrumentDateRange
+                # returned zero for. Live-verified here too: the county site
+                # shows 140 real FORECLOSURE NOTICE records recorded in the last
+                # ~2 months via recordedDateRange, while this scraper had 0 NOF
+                # records captured at all using instrumentDateRange (THIS WAS
+                # UNDER advancedSearch -- see v2.10 below, that part of the
+                # finding doesn't carry over to quickSearch).
+                #
+                # v2.10 (2026-10-01): the real, root-cause fix for FC's "0 new
+                # records" every run this week. Xavi demonstrated his own manual
+                # search live -- department=FC, searchType=quickSearch (NOT
+                # advancedSearch), instrumentDateRange (NOT recordedDateRange),
+                # no docTypes/searchValue -- and it returned 835 real results
+                # including a lead recorded THAT DAY. The exact same URL shape
+                # this file has been building (advancedSearch+recordedDateRange)
+                # independently confirmed dead live in a browser the same night
+                # (genuine "No Results Found" for a full-year window, zero
+                # tables in the DOM) -- this was never a race condition or a
+                # session/bot issue, the mechanism itself was simply wrong.
+                # instrumentDateRange's end bound needs to extend into the
+                # future (same requirement already documented on bexar-leads'
+                # analogous doc-number lookup) -- 60 days is a safe margin.
+                end_str = (TODAY + timedelta(days=60)).strftime("%Y%m%d")
+                url = (
+                    f"{PUBLICSEARCH_BASE}/results"
+                    f"?department=FC"
+                    f"&instrumentDateRange={cutoff}%2C{end_str}"
+                    f"&keywordSearch=false"
+                    f"&limit=50"
+                    f"&offset={offset}"
+                    f"&sort=desc"
+                    f"&sortBy=recordedDate"
+                    f"&searchType=quickSearch"
+                )
+            else:
+                end_str = (TODAY - timedelta(days=3)).strftime("%Y%m%d")
+                url = (
+                    f"{PUBLICSEARCH_BASE}/results"
+                    f"?department={department}"
+                    f"&docTypes={doc_types}"
+                    f"&recordedDateRange={cutoff}%2C{end_str}"
+                    f"&keywordSearch=false"
+                    f"&limit=50"
+                    f"&offset={offset}"
+                    f"&sort=desc"
+                    f"&sortBy=recordedDate"
+                    f"&searchType=advancedSearch"
+                )
+            log.info(f"  offset={offset}")
+
+            try:
+                driver.get("about:blank")
+            except Exception:
+                pass
+            try:
+                driver.get(url)
+            except Exception as e:
+                log.warning(f"  Page load failed offset={offset}: {e}")
+                consecutive_empty += 1
+                if consecutive_empty >= 3:
+                    break
+                time.sleep(5)
+                continue
 
         state = _wait_for_stable_results(driver, 30)
         if state == "empty":
