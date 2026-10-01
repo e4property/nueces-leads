@@ -307,9 +307,25 @@ LOT_RE       = re.compile(r"\bL(?:OT[S]?|T)\.?\s*([0-9A-Z\-]+)")
 BLOCK_NUM_RE = re.compile(r"\b(?:BL(?:OCK|OC|K)|BK)\.?\s*([0-9A-Z\-]+)")
 SECTION_RE   = re.compile(r"\bSEC(?:TION)?\.?\s*([0-9A-Z\-]+)")
 
+# Strips a trailing "<city> TX <zip>" tail off a PublicSearch address cell
+# that has no LOT/BLOCK subdivision suffix to truncate at instead. Anchored
+# on a known street-type suffix word (not a generic greedy word-match) so a
+# multi-word city like "CORPUS CHRISTI" doesn't get partially eaten into the
+# street part -- see 2026-10-01 note where that happened.
+_STREET_SUFFIX = (r"(?:ST|STREET|AVE|AVENUE|DR|DRIVE|LN|LANE|RD|ROAD|BLVD|BOULEVARD|"
+                   r"CT|COURT|CIR|CIRCLE|WAY|PL|PLACE|TRL|TRAIL|LOOP|PKWY|PARKWAY|"
+                   r"HWY|HIGHWAY|XING|CROSSING|BND|BEND|PASS|RUN|CV|COVE|PT|POINT|"
+                   r"TER|TERRACE|SQ|SQUARE|ROW|WALK|PATH|VW|VIEW|RDG|RIDGE|GLN|GLEN|"
+                   r"MDWS|MEADOWS|HOLW|HOLLOW|VLG|VILLAGE|CRK|CREEK|PARK)")
+CITY_ZIP_TAIL_RE = re.compile(
+    r"^(\d+\s+[A-Z0-9]+(?:\s+[A-Z0-9]+)*?\s+" + _STREET_SUFFIX + r")\b"
+    r"(?:\s+[A-Z0-9 ]+)?\s+TX\s+\d{5}(?:-\d{4})?\s*$"
+)
+
 LEGAL_NOISE_WORDS = {
     "SUBDIVISION","SUBD","ADDITION","ADDN","ADD","UNIT","PHASE","PH",
-    "REPLAT","AMENDED","AMD","PLAT","OF","THE","AN","A","AND","INST",
+    "REPLAT","AMENDED","AMD","CORRECTING","CORRECTION","CORR","PLAT",
+    "OF","THE","AN","A","AND","INST",
     "NO","NUMBER","RECORDED","VOL","VOLUME","PG","PAGE"
 }
 
@@ -1069,6 +1085,17 @@ def enrich_from_lookup(rec, lookup_tuple):
         addr = (rec.get("address", "") or "").strip().upper()
         if addr and len(addr) > 5:
             result = lookup.get(addr)
+            # 2026-10-01: backlog records saved before the scraper-side
+            # extraction fix can still carry a "<street> <city> TX <zip>"
+            # address (the roll only indexes the street part) -- strip a
+            # trailing city/TX/zip tail and retry so already-stored bad
+            # addresses get a second chance without needing a re-scrape.
+            if not result:
+                m = CITY_ZIP_TAIL_RE.match(addr)
+                if m:
+                    stripped = m.group(1).strip()
+                    if stripped != addr:
+                        result = lookup.get(stripped)
 
     # Strategy 5: owner last name cross-match with address number
     if not result:
@@ -1453,12 +1480,25 @@ def scrape_publicsearch(department, lead_type, known_docs, driver, run_ts, days=
             if addr_candidates:
                 raw_addr = addr_candidates[0]
                 # May contain subdivision name like "LAMAR PARK SECTION 1 LOT 2"
-                # Try to extract just the street address if it has a number prefix
-                addr_m = re.match(r"^(\d+\s+[A-Z0-9 ]+?)(?:\s+(?:LOT|BLOCK|SECTION|UNIT|APT|#).*)?$", raw_addr.upper())
+                # Try to extract just the street address if it has a number prefix.
+                addr_m = re.match(r"^(\d+\s+[A-Z0-9 ]+?)\s+(?:LOT|BLOCK|SECTION|UNIT|APT|#).*$", raw_addr.upper())
                 if addr_m:
                     property_addr = addr_m.group(1).strip()
                 else:
-                    property_addr = raw_addr.upper()[:80]
+                    # 2026-10-01: cell had no subdivision suffix to truncate at --
+                    # just "<street> <city> TX <zip>", e.g. "10521 BANDERA DR
+                    # CORPUS CHRISTI TX 78410" -- used to fall through with the
+                    # whole city/state/zip tail still attached, confirmed live to
+                    # break strategy 4's exact situs-address match against the
+                    # roll (which stores street-only). A naive greedy "strip
+                    # everything before TX <zip>" over-consumes on multi-word
+                    # cities (eats "CORPUS" into the street); anchoring on a
+                    # known street-type suffix word first avoids that.
+                    city_m = CITY_ZIP_TAIL_RE.match(raw_addr.upper())
+                    if city_m:
+                        property_addr = city_m.group(1).strip()
+                    else:
+                        property_addr = raw_addr.upper()[:80]
 
             dates = [c for c in cells if re.match(r"^\d{1,2}/\d{1,2}/\d{4}$", c.strip())]
             recorded_date = dates[0] if dates else ""
