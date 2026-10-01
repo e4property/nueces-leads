@@ -1969,18 +1969,26 @@ def main():
         all_new.extend(nof_recs)
 
         # Source 3: RP department — Appointment of Substitute Trustee (Pre-Fore).
+        # DISABLED 2026-10-01: this search has returned 0 results on every
+        # run for as long as it's been checked -- the mechanism itself is
+        # broken (separate from the pagination bug fixed elsewhere tonight,
+        # never root-caused). The 151 APPT records it had already produced
+        # were pure dead weight (no address/appraised value/sale date ever
+        # populated) and were purged from records.json the same day this
+        # was disabled. Re-enable only after finding a working search
+        # mechanism for this department -- don't just uncomment this as-is.
         # v2.0: docTypes=APPNMT is the real filter mechanism (live-verified via
         # the Advanced Search UI) -- searchType=quickSearch&searchValue=
         # APPOINTMENT never matched anything.
-        appt_recs = scrape_publicsearch(
-            department="RP",
-            doc_types="APPNMT",
-            lead_type="APPT",
-            known_docs=known_docs,
-            driver=driver,
-            run_ts=run_ts,
-        )
-        all_new.extend(appt_recs)
+        # appt_recs = scrape_publicsearch(
+        #     department="RP",
+        #     doc_types="APPNMT",
+        #     lead_type="APPT",
+        #     known_docs=known_docs,
+        #     driver=driver,
+        #     run_ts=run_ts,
+        # )
+        # all_new.extend(appt_recs)
 
         # ── Enrich ALL records missing address — new + existing ──────────────
         # (runs here, while the driver is still open, so the Selenium fallback
