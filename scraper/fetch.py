@@ -1979,15 +1979,15 @@ def main():
     # ── Purge past auctions ───────────────────────────────────────────────────
     all_records = purge_past_auctions(all_records)
 
-    # ── 90-day rolling filter ─────────────────────────────────────────────────
-    before_filter = len(all_records)
-    all_records = [
-        r for r in all_records
-        if r.get("type") in ("CE", "APPT")  # keep CE and Pre-Fore always
-        or r.get("ghl_pushed") or r.get("dash_phone")  # keep worked leads
-        or filed_within_window(r.get("date_filed", "") or r.get("opened_date", ""), SCRAPE_DAYS)
-    ]
-    log.info(f"90-day filter: {before_filter} → {len(all_records)}")
+    # 2026-10-01: removed the redundant "90-day rolling filter" that used
+    # to sit here -- standing rule now: a lead already in the dashboard is
+    # only ever removed by the dedicated purge_past_auctions() call right
+    # above, never by a second filter duplicated into the main scrape.
+    # This block was actually using SCRAPE_DAYS=365 despite its "90-day"
+    # name (stale comment, not even accurate to what it did), and
+    # duplicated protections purge_past_auctions() already owns more
+    # carefully (CE/APPT/worked-lead exemptions, 180-day no-sale-date
+    # threshold) -- same bug class found and fixed on bexar-leads today.
 
     # ── On-market status ──────────────────────────────────────────────────────
     try:
