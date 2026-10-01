@@ -1000,6 +1000,16 @@ def load_lookup():
                 situs = (row.get("situs_addr", "") or "").strip().upper()
                 if situs and situs not in lookup:
                     lookup[situs] = row
+                # 2026-10-01: the roll's situs_addr is multi-line --
+                # "10521 BANDERA DR \nCORPUS CHRISTI, TX 78410" -- not
+                # street-only as earlier comments here assumed. A notice's
+                # own address (always a single line, no comma) can never
+                # exact-match that raw string. Index the street-only
+                # portion (everything before the newline/comma) too, so a
+                # clean single-line street address still finds this row.
+                street_only = re.split(r"[\n,]", situs)[0].strip()
+                if street_only and street_only != situs and street_only not in lookup:
+                    lookup[street_only] = row
 
                 # 4. owner last name
                 owner = (row.get("owner", "") or "").strip().upper()
