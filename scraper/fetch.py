@@ -8,6 +8,22 @@ Enrichment: Nueces CAD appraisal roll lookup CSV (legal desc → address/owner/v
 GHL tags: nueces_lead, nueces_prefore, nueces_ce
 Scrape schedule: Mon/Thu 9am + 3pm CST (14:00 + 20:00 UTC)
 
+v2.7 changes (quickSearch needs an authenticated session, same as bexar-leads):
+  - v2.5's quickSearch fix tested 10/10 in isolated manual sessions but has
+    been a clean 0/60 on every single real CI run since (confirmed live
+    2026-10-01: the exact doc number a same-run CI log called "no results
+    for this doc number" returns a real 1-of-1 result for the identical
+    URL/date-range hit from a fresh anonymous browser tab seconds later --
+    not a timeout, not a date-math bug, a well-formed decoy "No Results
+    Found" page served specifically to the automated session). This is the
+    exact symptom bexar-leads hit and fixed back on 8/20 (v28.39 in that
+    file): quickSearch silently requires an authenticated session for
+    automated/headless traffic even though the main chunked /results browse
+    works anonymously. login_publicsearch() ported verbatim from
+    bexar-leads/scraper/fetch.py and called once before the address-
+    fallback loop, same placement as that file's doc-detail fetch step.
+  - CLERK_EMAIL/CLERK_PASSWORD now required as GitHub Secrets here too.
+
 v2.5 changes (fixed the REAL reason OCR never ran -- address fallback was dead):
   - The v2.4 OCR fallback shipped correctly but never actually fired in
     production: audited real CI logs and found fetch_address_by_docnumber()
@@ -525,6 +541,85 @@ def _parse_address_from_current_page(driver, doc_number):
 # seem to be scoped by department, so an APPT (RP) doc number won't show up
 # in an FC-scoped search and vice versa.
 DEPT_BY_TYPE = {"NOF": "FC", "TAX": "FC", "APPT": "RP"}
+
+
+# v2.7: ported verbatim from bexar-leads/scraper/fetch.py's login_publicsearch()
+# (v28.39 there) -- same platform, same fix for the same quickSearch-needs-auth
+# symptom. Called once before the address-fallback loop below.
+def login_publicsearch(driver):
+    from selenium.webdriver.common.by import By
+
+    email    = os.environ.get("CLERK_EMAIL", "")
+    password = os.environ.get("CLERK_PASSWORD", "")
+    if not email or not password:
+        log.warning("No CLERK_EMAIL/CLERK_PASSWORD — skipping login")
+        return False
+    try:
+        driver.set_page_load_timeout(20)
+        driver.get(f"{PUBLICSEARCH_BASE}/signin")
+        time.sleep(4)
+        log.info(f"Login page title: {driver.title} | url: {driver.current_url}")
+
+        email_el = None
+        for sel in ["input[type='email']", "input[name='email']",
+                    "input[name='username']", "input[placeholder*='mail']",
+                    "input[placeholder*='ser']"]:
+            try:
+                els = driver.find_elements(By.CSS_SELECTOR, sel)
+                if els:
+                    email_el = els[0]
+                    break
+            except Exception:
+                pass
+
+        if not email_el:
+            return False
+
+        email_el.clear()
+        email_el.send_keys(email)
+
+        pass_el = None
+        for sel in ["input[type='password']", "input[name='password']"]:
+            try:
+                els = driver.find_elements(By.CSS_SELECTOR, sel)
+                if els:
+                    pass_el = els[0]
+                    break
+            except Exception:
+                pass
+
+        if not pass_el:
+            return False
+
+        pass_el.clear()
+        pass_el.send_keys(password)
+
+        submitted = False
+        for sel in ["button[type='submit']", "input[type='submit']", "button"]:
+            try:
+                btns = driver.find_elements(By.CSS_SELECTOR, sel)
+                for btn in btns:
+                    txt = (btn.text or "").lower()
+                    if any(x in txt for x in ["sign in", "login", "log in", "submit", ""]):
+                        btn.click()
+                        submitted = True
+                        break
+            except Exception:
+                pass
+            if submitted:
+                break
+
+        if not submitted:
+            pass_el.submit()
+
+        time.sleep(4)
+        if "login" not in driver.current_url.lower():
+            log.info("PublicSearch login OK")
+            return True
+        return False
+    except Exception as e:
+        log.warning(f"PublicSearch login error: {e}")
+        return False
 
 
 def fetch_address_by_docnumber(driver, doc_number, department, timeout=40, _hop=False):
@@ -1869,6 +1964,12 @@ def main():
             if rec.get("address") and not before_addr:
                 enriched += 1
         log.info(f"Roll enrichment: {enriched}/{len(all_new)} new-lead addresses filled")
+
+        # v2.7: log in before the quickSearch-dependent fallback loop below --
+        # see this file's v2.7 changelog note and login_publicsearch() docstring.
+        # Main NOF/APPT scrape above is done by now, so this can't affect it.
+        if not login_publicsearch(driver):
+            log.warning("Address fallback: PublicSearch login failed or was skipped — quickSearch lookups will likely keep failing")
 
         # ── Selenium fallback: any lead still missing address after roll match ──
         # v1.3: covers the full backlog (enrich_targets = all_new + existing),
