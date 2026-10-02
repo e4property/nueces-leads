@@ -338,6 +338,15 @@ def parse_legal_components(s):
     almost never formatted identically even for the same parcel.
     """
     s = html.unescape(s or "").upper()
+    # 2026-10-01: strip apostrophes WITHOUT leaving a gap, before the
+    # generic punctuation strip below turns them into a space. The roll
+    # spells possessive subdivision names without an apostrophe at all
+    # ("KINGS CROSSING"), but a notice spelling it "KING'S CROSSING"
+    # used to have the trailing "S" orphaned into its own 1-character
+    # token and dropped (len<3 filter) -- sig ended up {KING, CROSSING}
+    # vs the roll's {KINGS, CROSSING}, a dead mismatch despite being the
+    # same subdivision. Confirmed live against the real roll data.
+    s = s.replace("'", "").replace("’", "")
     s = re.sub(r"[^\w\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
 
