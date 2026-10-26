@@ -118,5 +118,35 @@
   "sale_date": "2026-11-03",
   "owner": "De Leon Alfredo",
   "county": "nueces"
+ },
+ "3037 BRAWNER PKWY CORPUS CHRISTI, TX 78415|2026-12-01": {
+  "address": "3037 BRAWNER PKWY CORPUS CHRISTI, TX 78415",
+  "sale_date": "2026-12-01",
+  "owner": "Juarez Cody",
+  "county": "nueces"
+ },
+ "5018 CYNTHIA CORPUS CHRISTI, TX 78410|2026-12-01": {
+  "address": "5018 CYNTHIA CORPUS CHRISTI, TX 78410",
+  "sale_date": "2026-12-01",
+  "owner": "ROSS BRIAN LEEROY",
+  "county": "nueces"
+ },
+ "3237 DUNBARTON OAK CORPUS CHRISTI, TX 78414|2026-12-01": {
+  "address": "3237 DUNBARTON OAK CORPUS CHRISTI, TX 78414",
+  "sale_date": "2026-12-01",
+  "owner": "Dominguez Daniel & Wf Fatima I",
+  "county": "nueces"
+ },
+ "1329 CALLE SAN LUCAS CORPUS CHRISTI, TX 78417|2026-12-01": {
+  "address": "1329 CALLE SAN LUCAS CORPUS CHRISTI, TX 78417",
+  "sale_date": "2026-12-01",
+  "owner": "Rosales Edna",
+  "county": "nueces"
+ },
+ "4509 MOLINA DR CORPUS CHRISTI, TX 78416|2026-12-01": {
+  "address": "4509 MOLINA DR CORPUS CHRISTI, TX 78416",
+  "sale_date": "2026-12-01",
+  "owner": "Almaguer Miguel And",
+  "county": "nueces"
  }
 }
