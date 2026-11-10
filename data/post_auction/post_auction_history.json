@@ -304,5 +304,59 @@
   "owner_now": "",
   "outcome": "check by hand",
   "checked_at": "2026-11-05T21:08:51Z"
+ },
+ "1313 HARBOR VILLAGE CORPUS CHRISTI, TX 78412|2026-11-03|7d": {
+  "window": "7 days after sale",
+  "sale_date": "2026-11-03",
+  "address": "1313 HARBOR VILLAGE CORPUS CHRISTI, TX 78412",
+  "owner_before": "Dewees John Joseph Dewees Jr",
+  "owner_now": "",
+  "outcome": "check by hand",
+  "checked_at": "2026-11-10T20:56:04Z"
+ },
+ "1310 DAYTONA DR CORPUS CHRISTI, TX 78415|2026-11-03|7d": {
+  "window": "7 days after sale",
+  "sale_date": "2026-11-03",
+  "address": "1310 DAYTONA DR CORPUS CHRISTI, TX 78415",
+  "owner_before": "Delgado Sergio And Lucila Delgado",
+  "owner_now": "",
+  "outcome": "check by hand",
+  "checked_at": "2026-11-10T20:56:05Z"
+ },
+ "234 NORTON CORPUS CHRISTI, TX 78415|2026-11-03|7d": {
+  "window": "7 days after sale",
+  "sale_date": "2026-11-03",
+  "address": "234 NORTON CORPUS CHRISTI, TX 78415",
+  "owner_before": "Webb Eli J Et Ux",
+  "owner_now": "",
+  "outcome": "check by hand",
+  "checked_at": "2026-11-10T20:56:05Z"
+ },
+ "4713 GABRIEL DR CORPUS CHRISTI, TX 78415|2026-11-03|7d": {
+  "window": "7 days after sale",
+  "sale_date": "2026-11-03",
+  "address": "4713 GABRIEL DR CORPUS CHRISTI, TX 78415",
+  "owner_before": "Gomez Carolina Serrato",
+  "owner_now": "",
+  "outcome": "check by hand",
+  "checked_at": "2026-11-10T20:56:06Z"
+ },
+ "1741 SPANISH TRL CORPUS CHRISTI, TX 78410|2026-11-03|7d": {
+  "window": "7 days after sale",
+  "sale_date": "2026-11-03",
+  "address": "1741 SPANISH TRL CORPUS CHRISTI, TX 78410",
+  "owner_before": "Martinez Jake E",
+  "owner_now": "",
+  "outcome": "check by hand",
+  "checked_at": "2026-11-10T20:56:06Z"
+ },
+ "7733 LARIAT TOSS DR CORPUS CHRISTI, TX 78414|2026-11-03|7d": {
+  "window": "7 days after sale",
+  "sale_date": "2026-11-03",
+  "address": "7733 LARIAT TOSS DR CORPUS CHRISTI, TX 78414",
+  "owner_before": "De Leon Alfredo",
+  "owner_now": "",
+  "outcome": "check by hand",
+  "checked_at": "2026-11-10T20:56:06Z"
  }
 }
