@@ -1289,7 +1289,7 @@ def new_record(doc_number, lead_type, source="publicsearch", run_ts=None):
         "ce_category":      "",
         "opened_date":      "",
         # Dashboard fields
-        "dash_phone":       "",
+        "dash_has_phone":   False,
         "dash_dispo":       "new",
         "dash_notes":       "",
         "ghl_pushed":       False,
@@ -1773,7 +1773,7 @@ def purge_past_auctions(records):
     for rec in records:
         lead_type = rec.get("type", "")
         # Never purge CE, APPT, or GHL-worked leads
-        if lead_type in ("CE", "APPT") or rec.get("ghl_pushed") or rec.get("dash_phone"):
+        if lead_type in ("CE", "APPT") or rec.get("ghl_pushed") or rec.get("dash_has_phone") or rec.get("dash_phone"):
             kept.append(rec)
             continue
         # NOF/TAX: purge only once the auction date itself has passed --
@@ -2250,6 +2250,14 @@ def main():
     # so it doesn't bloat records.json or leak into the dashboard.
     for rec in all_records:
         rec.pop("_source_url", None)
+
+    # 2026-11-12 privacy: phones, notes and lookup dates live ONLY in the private repo
+    # (e4property/e4-leads-private). Never publish them; public records get dash_has_phone only.
+    for _r in all_records:
+        if _r.get("dash_phone"):
+            _r["dash_has_phone"] = True
+        for _k in ("dash_phone", "dash_notes", "dash_searched_at"):
+            _r.pop(_k, None)
 
     RECORDS_PATH.parent.mkdir(parents=True, exist_ok=True)
     RECORDS_PATH.write_text(
