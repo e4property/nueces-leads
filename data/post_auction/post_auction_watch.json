@@ -148,5 +148,11 @@
   "sale_date": "2026-12-01",
   "owner": "Almaguer Miguel And",
   "county": "nueces"
+ },
+ "2541 DUNBAR CORPUS CHRISTI, TX 78405|2027-01-05": {
+  "address": "2541 DUNBAR CORPUS CHRISTI, TX 78405",
+  "sale_date": "2027-01-05",
+  "owner": "Martinez Juan R",
+  "county": "nueces"
  }
 }
